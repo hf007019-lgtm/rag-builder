@@ -1,84 +1,71 @@
-# RAG Builder 项目功能验收清单
+# 项目功能检查清单
 
-## 1. 文档说明
+这份清单用于确认本地 RAG 后端是否能跑通。
 
-本文档用于检查 RAG Builder 的核心功能是否完整、服务是否可运行、接口是否可测试。
+## 环境
 
-项目定位是轻量级企业知识库 RAG 系统，参考 RAGFlow 工程思想做轻量实现，聚焦核心 RAG 链路实现。
+- [ ] Docker Desktop 已启动。
+- [ ] `docker compose up -d` 执行成功。
+- [ ] PostgreSQL 容器正常。
+- [ ] MinIO 容器正常。
+- [ ] Redis 容器正常。
+- [ ] Elasticsearch 容器正常。
+- [ ] `python scripts/check_env.py` 通过。
+- [ ] `python scripts/init_db.py` 成功。
 
----
+## 服务
 
-## 2. 基础环境验收
+- [ ] FastAPI 能启动。
+- [ ] Swagger 能打开：`http://127.0.0.1:18000/docs`。
+- [ ] Celery Worker 能启动。
+- [ ] Worker 任务列表包含 `worker.tasks.parse_document_task`。
+- [ ] `GET /api/v1/health` 返回 `ok`。
+- [ ] `GET /api/v1/health/dependencies` 中依赖全部为 `ok`。
 
-- [ ] Docker 依赖服务是否正常启动。
-- [ ] PostgreSQL 容器是否正常运行。
-- [ ] MinIO 容器是否正常运行。
-- [ ] Redis 容器是否正常运行。
-- [ ] Elasticsearch 容器是否正常运行。
-- [ ] `python scripts/check_env.py` 是否通过。
-- [ ] `python scripts/init_db.py` 是否成功。
+## 文档入库
 
----
+- [ ] `.txt` 文件能上传。
+- [ ] `.pdf` 文件能上传。
+- [ ] 不支持的文件类型会被拒绝。
+- [ ] 重复文件不会重复解析。
+- [ ] 上传后返回 `doc_id`。
+- [ ] 新文档初始状态为 `PENDING`。
+- [ ] Worker 能接到解析任务。
+- [ ] 文档状态能变成 `SUCCESS`。
+- [ ] 失败时状态能变成 `FAILED`。
+- [ ] Elasticsearch 中能查到对应 chunks。
 
-## 3. 服务启动验收
+## 任务日志和重试
 
-- [ ] FastAPI 是否能正常启动。
-- [ ] Celery Worker 是否能正常启动。
-- [ ] `GET /api/v1/health` 是否返回正常状态。
-- [ ] `GET /api/v1/health/dependencies` 是否全部为 `ok`。
+- [ ] 成功任务会写入 `task_logs`。
+- [ ] 失败任务会记录 `error_message`。
+- [ ] `GET /api/v1/documents/{doc_id}/task-log` 能查到日志。
+- [ ] `FAILED` 文档可以调用 retry。
+- [ ] `SUCCESS` 文档调用 retry 会被拒绝。
 
----
+## 问答
 
-## 4. 文档处理链路验收
+- [ ] `POST /api/v1/search/ask` 能返回 `answer`。
+- [ ] `POST /api/v1/search/ask` 能返回 `sources`。
+- [ ] `sources` 包含 `doc_id`。
+- [ ] `sources` 包含 `file_name`。
+- [ ] `sources` 包含 `chunk_id`。
+- [ ] `sources` 包含 `page_number`。
+- [ ] `sources` 包含 `chunk_text`。
+- [ ] `sources` 包含 `score`。
 
-- [ ] 文档是否能通过接口上传。
-- [ ] 上传后文档状态是否为 `PENDING`。
-- [ ] Worker 是否能接收解析任务。
-- [ ] Worker 是否能完成文档解析。
-- [ ] Worker 是否能完成文本清洗。
-- [ ] Worker 是否能完成 chunk 切分。
-- [ ] Worker 是否能完成 Embedding 向量化。
-- [ ] Worker 是否能把 chunks 和 vectors 写入 Elasticsearch。
-- [ ] 文档状态是否能从 `PENDING` 变成 `SUCCESS`。
+## 删除
 
----
+- [ ] 删除文档接口能返回成功。
+- [ ] MinIO 原文件被删除。
+- [ ] Elasticsearch chunks 被删除。
+- [ ] PostgreSQL `documents` 记录被删除。
+- [ ] `task_logs` 历史记录按当前设计保留。
 
-## 5. 任务日志与重试验收
+## 文档
 
-- [ ] `task_logs` 是否能记录任务成功信息。
-- [ ] `task_logs` 是否能记录任务失败原因。
-- [ ] `GET /api/v1/documents/{doc_id}/task-log` 是否能查询任务日志。
-- [ ] `POST /api/v1/documents/{doc_id}/retry` 是否能重新派发失败文档的解析任务。
-- [ ] `POST /api/v1/documents/{doc_id}/retry` 是否能限制 `SUCCESS` 文档重复解析。
-
----
-
-## 6. RAG 问答验收
-
-- [ ] `POST /api/v1/search/ask` 是否能返回 `answer`。
-- [ ] `POST /api/v1/search/ask` 是否能返回 `sources`。
-- [ ] `sources` 是否包含 `doc_id`。
-- [ ] `sources` 是否包含 `file_name`。
-- [ ] `sources` 是否包含 `chunk_id`。
-- [ ] `sources` 是否包含 `page_number`。
-- [ ] `sources` 是否包含 `chunk_text`。
-- [ ] `sources` 是否包含 `score`。
-
----
-
-## 7. 文档删除验收
-
-- [ ] 删除文档时是否能删除 MinIO 原文件。
-- [ ] 删除文档时是否能删除 Elasticsearch 中对应的 chunks。
-- [ ] 删除文档时是否能删除 PostgreSQL `documents` 记录。
-
----
-
-## 8. 文档完整性验收
-
-- [ ] README 或项目说明文档是否完整。
-- [ ] `docs/api.md` 是否描述主要接口。
-- [ ] `docs/architecture.md` 是否描述系统架构。
-- [ ] `docs/testing.md` 是否描述测试流程。
-- [ ] `docs/troubleshooting.md` 是否描述常见问题和排查方法。
-- [ ] 本清单是否随核心功能变化同步更新。
+- [ ] README 能说明项目用途和启动方式。
+- [ ] `docs/api.md` 接口路径与代码一致。
+- [ ] `docs/architecture.md` 说明当前模块边界。
+- [ ] `docs/testing.md` 可以按步骤完成本地测试。
+- [ ] `docs/troubleshooting.md` 覆盖常见本地问题。
