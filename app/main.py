@@ -1,6 +1,8 @@
 # 从 FastAPI 导入 FastAPI
 # 作用：FastAPI 是创建后端服务的核心类
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 
 # 从本地代理防御文件导入 disable_proxy_for_localhost
@@ -73,3 +75,15 @@ app.include_router(
     prefix="/api/v1/health",
     tags=["health"]
 )
+
+
+# 挂载前端静态资源目录
+# 作用：让浏览器可以访问 /static/styles.css 和 /static/app.js
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+
+# 返回 RAG Builder Web 控制台首页
+# 作用：浏览器访问 http://127.0.0.1:18000/ 时直接打开单页工作台
+@app.get("/")
+def index():
+    return FileResponse("app/static/index.html")

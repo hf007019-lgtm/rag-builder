@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG Builder 知识库工作台</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar" aria-label="左侧导航">
+            <div class="brand">
+                <div class="brand-mark">R</div>
+                <div>
+                    <div class="brand-title">RAG Builder</div>
+                    <div class="brand-subtitle">Local AI Workspace</div>
+                </div>
+            </div>
+
+            <nav class="nav-list" aria-label="主导航">
+                <button class="nav-item active" type="button" data-target="ask-panel">
+                    <span class="nav-symbol">+</span>
+                    <span>新建问答</span>
+                </button>
+                <button class="nav-item" type="button" data-target="documents-card">
+                    <span class="nav-symbol">D</span>
+                    <span>文档管理</span>
+                </button>
+                <button class="nav-item" type="button" data-target="answer-card">
+                    <span class="nav-symbol">K</span>
+                    <span>知识库检索</span>
+                </button>
+                <button class="nav-item" type="button" data-target="task-log-card">
+                    <span class="nav-symbol">L</span>
+                    <span>解析日志</span>
+                </button>
+                <button class="nav-item" type="button" data-target="health-card">
+                    <span class="nav-symbol">S</span>
+                    <span>系统状态</span>
+                </button>
+            </nav>
+
+            <section class="recent-panel" aria-label="最近文档">
+                <div class="panel-label">最近文档</div>
+                <div id="recentDocuments" class="recent-list">
+                    <div class="muted-line">等待加载文档...</div>
+                </div>
+            </section>
+
+            <div class="runtime-card">
+                <div class="runtime-dot"></div>
+                <div>
+                    <div class="runtime-title">本地运行</div>
+                    <div class="runtime-subtitle">FastAPI :18000</div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+            <section class="intro" aria-labelledby="workspace-title">
+                <p class="eyebrow">RAG Builder 知识库工作台</p>
+                <p class="intro-copy">上传文档，异步解析，向量检索，并通过 sources 追踪答案来源。</p>
+            </section>
+
+            <section id="ask-panel" class="ask-panel" aria-labelledby="ask-title">
+                <h1 id="ask-title">今天想检索什么知识？</h1>
+                <div class="prompt-box">
+                    <label class="sr-only" for="questionInput">检索问题</label>
+                    <textarea id="questionInput" rows="4">软件工程本科应届生报考广东事业编信息技术岗位需要注意什么？</textarea>
+                    <div class="prompt-actions">
+                        <button id="askButton" class="primary-button" type="button">开始检索</button>
+                    </div>
+                </div>
+                <div class="quick-actions" aria-label="快捷操作">
+                    <button id="quickUpload" class="pill-button" type="button">上传文档</button>
+                    <button id="quickRefresh" class="pill-button" type="button">刷新文档</button>
+                    <button id="quickHealth" class="pill-button" type="button">检查服务</button>
+                    <button id="quickLog" class="pill-button" type="button">查看日志</button>
+                </div>
+            </section>
+
+            <section class="workspace-grid" aria-label="控制台结果区">
+                <article id="health-card" class="card">
+                    <div class="card-header">
+                        <div>
+                            <p class="card-kicker">System</p>
+                            <h2>服务状态</h2>
+                        </div>
+                        <span id="overallHealth" class="status-badge neutral">检查中</span>
+                    </div>
+                    <div id="healthGrid" class="health-grid">
+                        <div class="muted-line">正在检查 PostgreSQL、MinIO、Redis、Elasticsearch...</div>
+                    </div>
+                </article>
+
+                <article id="upload-card" class="card">
+                    <div class="card-header">
+                        <div>
+                            <p class="card-kicker">Upload</p>
+                            <h2>文档上传</h2>
+                        </div>
+                    </div>
+                    <div class="upload-row">
+                        <label class="file-picker" for="fileInput">
+                            <span class="file-picker-title">选择文档文件</span>
+                            <span id="selectedFileName" class="file-picker-subtitle">支持上传 txt 等本地知识库文件</span>
+                        </label>
+                        <input id="fileInput" class="sr-only" type="file">
+                        <button id="uploadButton" class="secondary-button" type="button">上传</button>
+                    </div>
+                    <div id="uploadResult" class="result-box subtle">等待选择文件。</div>
+                </article>
+
+                <article id="answer-card" class="card answer-card">
+                    <div class="card-header">
+                        <div>
+                            <p class="card-kicker">Answer</p>
+                            <h2>RAG 问答结果</h2>
+                        </div>
+                        <span id="sourceCount" class="status-badge neutral">sources 0</span>
+                    </div>
+                    <div id="answerText" class="answer-text">输入问题后，答案会显示在这里。</div>
+                </article>
+
+                <article id="sources-card" class="card">
+                    <div class="card-header">
+                        <div>
+                            <p class="card-kicker">Sources</p>
+                            <h2>来源片段</h2>
+                        </div>
+                    </div>
+                    <div id="sourcesList" class="source-list">
+                        <div class="empty-state">当前没有检索到来源</div>
+                    </div>
+                </article>
+
+                <article id="documents-card" class="card card-wide">
+                    <div class="card-header">
+                        <div>
+                            <p class="card-kicker">Documents</p>
+                            <h2>文档列表</h2>
+                        </div>
+                        <button id="refreshDocumentsButton" class="ghost-button" type="button">刷新</button>
+                    </div>
+                    <div id="documentsList" class="document-list">
+                        <div class="muted-line">正在加载文档列表...</div>
+                    </div>
+                </article>
+
+                <article id="task-log-card" class="card card-wide">
+                    <div class="card-header">
+                        <div>
+                            <p class="card-kicker">Task Log</p>
+                            <h2 id="taskLogTitle">任务日志</h2>
+                        </div>
+                    </div>
+                    <div id="taskLogContent" class="log-box">暂无任务日志</div>
+                </article>
+            </section>
+        </main>
+    </div>
+
+    <div id="toastRegion" class="toast-region" aria-live="polite" aria-atomic="true"></div>
+    <script src="/static/app.js"></script>
+</body>
+</html>
