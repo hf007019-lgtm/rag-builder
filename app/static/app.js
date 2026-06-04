@@ -2,29 +2,35 @@ const API_BASE = "/api/v1";
 
 let latestDocuments = [];
 let lastSelectedDocId = null;
+let recentQuestionItems = [];
+let fileSelectionOrigin = "panel";
+let lastSourceContainer = null;
 
 const healthGrid = document.getElementById("healthGrid");
 const overallHealth = document.getElementById("overallHealth");
+const recentQuestions = document.getElementById("recentQuestions");
 const recentDocuments = document.getElementById("recentDocuments");
 const fileInput = document.getElementById("fileInput");
 const selectedFileName = document.getElementById("selectedFileName");
 const uploadButton = document.getElementById("uploadButton");
 const uploadResult = document.getElementById("uploadResult");
 const documentsList = document.getElementById("documentsList");
+const logDocumentList = document.getElementById("logDocumentList");
 const refreshDocumentsButton = document.getElementById("refreshDocumentsButton");
+const refreshHealthButton = document.getElementById("refreshHealthButton");
 const questionInput = document.getElementById("questionInput");
 const askButton = document.getElementById("askButton");
-const answerText = document.getElementById("answerText");
-const sourceCount = document.getElementById("sourceCount");
-const sourcesList = document.getElementById("sourcesList");
+const attachmentButton = document.getElementById("attachmentButton");
+const chooseFileButton = document.getElementById("chooseFileButton");
+const composerHint = document.getElementById("composerHint");
+const chatScroll = document.getElementById("chatScroll");
+const chatMessages = document.getElementById("chatMessages");
+const emptyState = document.getElementById("emptyState");
 const taskLogTitle = document.getElementById("taskLogTitle");
 const taskLogContent = document.getElementById("taskLogContent");
 const toastRegion = document.getElementById("toastRegion");
-
-const quickUpload = document.getElementById("quickUpload");
-const quickRefresh = document.getElementById("quickRefresh");
-const quickHealth = document.getElementById("quickHealth");
-const quickLog = document.getElementById("quickLog");
+const newChatButton = document.getElementById("newChatButton");
+const sidebarBackdrop = document.getElementById("sidebarBackdrop");
 
 const HEALTH_SERVICES = [
     { key: "postgresql", label: "PostgreSQL" },
@@ -33,12 +39,14 @@ const HEALTH_SERVICES = [
     { key: "elasticsearch", label: "Elasticsearch" }
 ];
 
-// 初始化页面事件，并在页面加载后拉取服务状态和文档列表。
+// 初始化页面事件，并预加载文档列表和依赖服务状态。
 document.addEventListener("DOMContentLoaded", () => {
     bindNavigation();
     bindActions();
-    checkHealth();
+    renderRecentQuestions();
     loadDocuments();
+    checkHealth();
+    resizeQuestionInput();
 });
 
 // 检查 PostgreSQL、MinIO、Redis、Elasticsearch 等依赖服务状态。
@@ -60,10 +68,10 @@ async function checkHealth() {
     }
 }
 
-// 加载文档列表，并同步刷新左侧最近文档区域。
+// 加载文档列表，并同步更新文档管理、日志选择器和侧栏最近文档。
 async function loadDocuments() {
     documentsList.innerHTML = "";
-    documentsList.appendChild(createMutedLine("正在加载文档列表..."));
+    documentsList.appendChild(createEmptyState("正在加载文档列表..."));
 
     try {
         const response = await fetch(`${API_BASE}/documents/`);
@@ -73,14 +81,15 @@ async function loadDocuments() {
         }
 
         const data = await response.json();
-        const documents = normalizeArray(data);
-        latestDocuments = documents.map(normalizeDocument);
+        latestDocuments = normalizeArray(data).map(normalizeDocument);
         renderDocuments(latestDocuments);
         renderRecentDocuments(latestDocuments);
+        renderLogDocumentList(latestDocuments);
     } catch (error) {
         latestDocuments = [];
         renderDocuments([]);
         renderRecentDocuments([]);
+        renderLogDocumentList([]);
         showError(`文档列表加载失败：${getErrorText(error)}`);
     }
 }
@@ -97,8 +106,9 @@ async function uploadDocument() {
     const formData = new FormData();
     formData.append("file", file);
     uploadButton.disabled = true;
+    attachmentButton.disabled = true;
     uploadButton.textContent = "上传中...";
-    uploadResult.classList.remove("subtle");
+    composerHint.textContent = `正在上传 ${file.name}...`;
     uploadResult.textContent = "正在上传文档，请稍候...";
 
     try {
@@ -124,19 +134,28 @@ async function uploadDocument() {
             ["message", message]
         ]);
 
+        composerHint.textContent = `${fileName} 已加入解析队列`;
         showNotice("文档上传成功，正在刷新文档列表。");
         await loadDocuments();
+        fileInput.value = "";
+        selectedFileName.textContent = "选择本地文件后开始上传";
     } catch (error) {
         uploadResult.textContent = "文档上传失败。";
+        composerHint.textContent = "文档上传失败，请稍后重试";
         showError(`文档上传失败：${getErrorText(error)}`);
     } finally {
         uploadButton.disabled = false;
-        uploadButton.textContent = "上传";
+        attachmentButton.disabled = false;
+        uploadButton.textContent = "上传文档";
     }
 }
 
-// 根据输入框中的问题发起 RAG 问答，并渲染 answer 与 sources。
+// 根据输入框中的问题发起 RAG 问答，并将结果追加到聊天消息流。
 async function askQuestion() {
+    if (askButton.disabled) {
+        return;
+    }
+
     const question = questionInput.value.trim();
 
     if (!question) {
@@ -145,12 +164,19 @@ async function askQuestion() {
         return;
     }
 
+    setView("chat");
+    emptyState.classList.add("hidden");
+    appendUserMessage(question);
+    addRecentQuestion(question);
+
+    const assistantMessage = createAssistantMessage();
+    lastSourceContainer = assistantMessage.sourceList;
+    questionInput.value = "";
+    resizeQuestionInput();
     askButton.disabled = true;
-    askButton.textContent = "检索中...";
-    answerText.textContent = "正在检索知识库并生成回答...";
-    sourceCount.textContent = "sources 0";
-    sourceCount.className = "status-badge neutral";
-    renderSources([]);
+    askButton.textContent = "…";
+    composerHint.textContent = "正在检索知识库并生成回答...";
+    scrollChatToBottom();
 
     try {
         const response = await fetch(`${API_BASE}/search/ask`, {
@@ -169,20 +195,21 @@ async function askQuestion() {
         const answer = data.answer ?? data.result ?? "后端没有返回 answer 字段。";
         const sources = normalizeArray(data.sources);
 
-        answerText.textContent = answer;
-        sourceCount.textContent = `sources ${sources.length}`;
-        sourceCount.className = sources.length > 0 ? "status-badge success" : "status-badge neutral";
-        renderSources(sources);
-        showNotice("检索完成。");
+        assistantMessage.answer.classList.remove("loading");
+        assistantMessage.answer.textContent = answer;
+        renderSources(sources, assistantMessage.sourceList);
+        composerHint.textContent = `回答完成 · sources ${sources.length}`;
     } catch (error) {
-        answerText.textContent = "问答请求失败，请检查文档是否已解析成功，或后端依赖服务是否正常。";
-        sourceCount.textContent = "sources 0";
-        sourceCount.className = "status-badge neutral";
-        renderSources([]);
+        assistantMessage.answer.classList.remove("loading");
+        assistantMessage.answer.classList.add("error");
+        assistantMessage.answer.textContent = "问答请求失败，请检查文档是否已解析成功，或后端依赖服务是否正常。";
+        renderSources([], assistantMessage.sourceList);
+        composerHint.textContent = "检索失败，请检查服务状态";
         showError(`问答请求失败：${getErrorText(error)}`);
     } finally {
         askButton.disabled = false;
-        askButton.textContent = "开始检索";
+        askButton.textContent = "↑";
+        scrollChatToBottom();
     }
 }
 
@@ -209,7 +236,7 @@ async function refreshDocumentStatus(docId) {
     }
 }
 
-// 加载指定文档的 Celery 解析任务日志，并展示到任务日志卡片。
+// 加载指定文档的解析任务日志，并切换到解析日志面板展示。
 async function loadTaskLog(docId) {
     if (!docId) {
         showError("缺少 doc_id，无法查看任务日志。");
@@ -217,9 +244,11 @@ async function loadTaskLog(docId) {
     }
 
     lastSelectedDocId = docId;
-    taskLogTitle.textContent = `任务日志 - doc_id=${docId}`;
+    setView("logs");
+    taskLogTitle.textContent = `解析日志 · doc_id=${docId}`;
     taskLogContent.innerHTML = "";
-    taskLogContent.appendChild(createMutedLine("正在加载任务日志..."));
+    taskLogContent.appendChild(createEmptyState("正在加载任务日志..."));
+    renderLogDocumentList(latestDocuments);
 
     try {
         const response = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/task-log`);
@@ -230,47 +259,71 @@ async function loadTaskLog(docId) {
 
         const logs = normalizeArray(await response.json());
         renderTaskLogs(logs);
-        document.getElementById("task-log-card").scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (error) {
-        taskLogContent.textContent = "任务日志获取失败";
+        taskLogContent.innerHTML = "";
+        taskLogContent.appendChild(createEmptyState("任务日志获取失败"));
         showError(`任务日志获取失败：${getErrorText(error)}`);
     }
 }
 
 // 渲染问答返回的 sources 来源片段列表。
-function renderSources(sources) {
+function renderSources(sources, targetContainer = lastSourceContainer) {
+    if (!targetContainer) {
+        return;
+    }
+
     const sourceItems = normalizeArray(sources);
-    sourcesList.innerHTML = "";
+    const section = targetContainer.closest(".sources-section");
+    const heading = section ? section.querySelector(".sources-heading") : null;
+    targetContainer.innerHTML = "";
+
+    if (section) {
+        section.hidden = false;
+    }
+
+    if (heading) {
+        heading.textContent = `Sources · ${sourceItems.length}`;
+    }
 
     if (sourceItems.length === 0) {
-        sourcesList.appendChild(createEmptyState("当前没有检索到来源"));
+        targetContainer.appendChild(createEmptyState("当前没有检索到来源"));
         return;
     }
 
     sourceItems.forEach((source, index) => {
-        const item = document.createElement("article");
-        item.className = "source-item";
+        const details = document.createElement("details");
+        details.className = "source-item";
+        details.open = index === 0;
 
-        const title = createTextElement("div", "source-title", source.file_name ?? source.filename ?? "未命名来源");
+        const summary = document.createElement("summary");
+        const fileName = source.file_name ?? source.filename ?? "未命名来源";
+        summary.append(
+            createTextElement("span", "source-title", fileName),
+            createTextElement("span", "source-index", `来源 ${index + 1}`)
+        );
+
+        const body = document.createElement("div");
+        body.className = "source-body";
+
         const meta = document.createElement("div");
         meta.className = "source-meta";
         appendMeta(meta, `doc_id=${source.doc_id ?? source.id ?? "-"}`);
         appendMeta(meta, `chunk_id=${source.chunk_id ?? source.chunkId ?? index + 1}`);
 
-        if ((source.page_number ?? source.pageNumber) !== undefined && (source.page_number ?? source.pageNumber) !== null) {
-            appendMeta(meta, `page=${source.page_number ?? source.pageNumber}`);
+        const pageNumber = source.page_number ?? source.pageNumber;
+        if (pageNumber !== undefined && pageNumber !== null) {
+            appendMeta(meta, `page=${pageNumber}`);
         }
 
         const chunkText = String(source.chunk_text ?? source.text ?? source.content ?? "");
         const preview = chunkText.length > 500 ? `${chunkText.slice(0, 500)}...` : chunkText;
-        const text = createTextElement("div", "source-text", preview || "该来源没有返回 chunk_text。");
-
-        item.append(title, meta, text);
-        sourcesList.appendChild(item);
+        body.append(meta, createTextElement("div", "source-text", preview || "该来源没有返回 chunk_text。"));
+        details.append(summary, body);
+        targetContainer.appendChild(details);
     });
 }
 
-// 渲染文档列表，并为每个文档挂载刷新状态和查看日志按钮。
+// 渲染文档管理列表，并提供状态刷新、重试解析、查看日志和删除操作。
 function renderDocuments(documents) {
     const documentItems = normalizeArray(documents).map(normalizeDocument);
     documentsList.innerHTML = "";
@@ -288,7 +341,6 @@ function renderDocuments(documents) {
         main.className = "document-main";
 
         const info = document.createElement("div");
-        const title = createTextElement("div", "document-title", doc.file_name);
         const meta = document.createElement("div");
         meta.className = "document-meta";
         appendMeta(meta, `doc_id=${doc.doc_id}`);
@@ -301,18 +353,19 @@ function renderDocuments(documents) {
             appendMeta(meta, `updated_at=${formatDate(doc.updated_at)}`);
         }
 
-        info.append(title, meta);
-
-        const badge = createTextElement("span", `status-badge ${getDocumentStatusClass(doc.status)}`, doc.status);
-        main.append(info, badge);
+        info.append(createTextElement("div", "document-title", doc.file_name), meta);
+        main.append(info, createTextElement("span", `status-badge ${getDocumentStatusClass(doc.status)}`, doc.status));
 
         const actions = document.createElement("div");
         actions.className = "document-actions";
-
         const refreshButton = createButton("刷新状态", "small-button", () => refreshDocumentStatus(doc.doc_id));
+        const retryButton = createButton("重试解析", "small-button", () => retryDocument(doc.doc_id));
         const logButton = createButton("查看日志", "small-button", () => loadTaskLog(doc.doc_id));
-        actions.append(refreshButton, logButton);
+        const deleteButton = createButton("删除", "small-button danger-button", () => deleteDocument(doc.doc_id, doc.file_name));
 
+        retryButton.disabled = doc.status !== "FAILED";
+        retryButton.title = doc.status === "FAILED" ? "重新派发解析任务" : "仅失败文档可以重试";
+        actions.append(refreshButton, retryButton, logButton, deleteButton);
         item.append(main, actions);
         documentsList.appendChild(item);
     });
@@ -332,9 +385,11 @@ function renderHealthStatus(data) {
         const status = String(itemData?.status ?? overall).toLowerCase();
         const row = document.createElement("div");
         row.className = "health-item";
-
-        row.appendChild(createTextElement("div", "health-name", service.label));
-        row.appendChild(createTextElement("span", `status-badge ${getHealthStatusClass(status)}`, getDependencyStatusText(status)));
+        row.title = itemData?.message ?? "";
+        row.append(
+            createTextElement("div", "health-name", service.label),
+            createTextElement("span", `status-badge ${getHealthStatusClass(status)}`, getDependencyStatusText(status))
+        );
         healthGrid.appendChild(row);
     });
 }
@@ -349,67 +404,185 @@ function showNotice(message) {
     showToast(message, "notice");
 }
 
-// 绑定左侧导航点击事件，让导航项滚动到对应卡片。
+// 绑定侧栏导航、返回问答和移动端导航抽屉事件。
 function bindNavigation() {
-    const navItems = document.querySelectorAll(".nav-item");
-
-    navItems.forEach((item) => {
-        item.addEventListener("click", () => {
-            navItems.forEach((navItem) => navItem.classList.remove("active"));
-            item.classList.add("active");
-
-            const targetId = item.getAttribute("data-target");
-            const target = targetId ? document.getElementById(targetId) : null;
-
-            if (target) {
-                target.scrollIntoView({ behavior: "smooth", block: "start" });
-            }
-        });
+    document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+        item.addEventListener("click", () => setView(item.dataset.view));
     });
+
+    document.querySelectorAll(".return-chat-button").forEach((button) => {
+        button.addEventListener("click", () => setView("chat"));
+    });
+
+    document.querySelectorAll(".mobile-menu-button").forEach((button) => {
+        button.addEventListener("click", () => document.body.classList.add("sidebar-open"));
+    });
+
+    sidebarBackdrop.addEventListener("click", closeSidebar);
+    newChatButton.addEventListener("click", newChat);
 }
 
-// 绑定页面按钮和文件选择框事件。
+// 绑定聊天输入、文件上传和面板操作事件。
 function bindActions() {
     askButton.addEventListener("click", askQuestion);
     uploadButton.addEventListener("click", uploadDocument);
     refreshDocumentsButton.addEventListener("click", loadDocuments);
+    refreshHealthButton.addEventListener("click", checkHealth);
 
-    fileInput.addEventListener("change", () => {
-        const file = fileInput.files && fileInput.files[0];
-        selectedFileName.textContent = file ? file.name : "支持上传 txt 等本地知识库文件";
-    });
-
-    quickUpload.addEventListener("click", () => {
-        document.getElementById("upload-card").scrollIntoView({ behavior: "smooth", block: "start" });
+    attachmentButton.addEventListener("click", () => {
+        fileSelectionOrigin = "composer";
+        fileInput.value = "";
         fileInput.click();
     });
 
-    quickRefresh.addEventListener("click", loadDocuments);
-    quickHealth.addEventListener("click", checkHealth);
+    chooseFileButton.addEventListener("click", () => {
+        fileSelectionOrigin = "panel";
+        fileInput.value = "";
+        fileInput.click();
+    });
 
-    quickLog.addEventListener("click", () => {
-        if (lastSelectedDocId) {
-            loadTaskLog(lastSelectedDocId);
-            return;
+    fileInput.addEventListener("change", () => {
+        const file = fileInput.files && fileInput.files[0];
+        selectedFileName.textContent = file ? file.name : "选择本地文件后开始上传";
+
+        if (file && fileSelectionOrigin === "composer") {
+            uploadDocument();
         }
+    });
 
-        document.getElementById("task-log-card").scrollIntoView({ behavior: "smooth", block: "start" });
-        showNotice("请先在文档列表里点击“查看日志”。");
+    questionInput.addEventListener("input", resizeQuestionInput);
+    questionInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+            event.preventDefault();
+            askQuestion();
+        }
     });
 }
 
-// 渲染左侧最近上传的 5 个文档文件名。
+// 切换聊天、文档、日志和系统状态工作视图。
+function setView(viewName) {
+    document.querySelectorAll(".app-view").forEach((view) => {
+        view.classList.toggle("active", view.dataset.viewName === viewName);
+    });
+
+    document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
+        item.classList.toggle("active", item.dataset.view === viewName);
+    });
+
+    closeSidebar();
+
+    if (viewName === "documents") {
+        loadDocuments();
+    } else if (viewName === "logs") {
+        renderLogDocumentList(latestDocuments);
+    } else if (viewName === "health") {
+        checkHealth();
+    } else if (viewName === "chat") {
+        window.setTimeout(() => questionInput.focus(), 0);
+    }
+}
+
+// 新建一个空白问答会话，并保留侧栏中的最近问题记录。
+function newChat() {
+    chatMessages.innerHTML = "";
+    emptyState.classList.remove("hidden");
+    questionInput.value = "";
+    composerHint.textContent = "RAG Builder 会基于已解析文档回答";
+    resizeQuestionInput();
+    setView("chat");
+}
+
+// 将用户问题追加到聊天消息流。
+function appendUserMessage(question) {
+    const message = document.createElement("article");
+    message.className = "message message-user";
+    message.appendChild(createTextElement("div", "user-bubble", question));
+    chatMessages.appendChild(message);
+}
+
+// 创建一个等待后端回答的系统消息，并返回可更新的节点。
+function createAssistantMessage() {
+    const message = document.createElement("article");
+    message.className = "message message-assistant";
+
+    const inner = document.createElement("div");
+    inner.className = "assistant-message";
+
+    const answer = createTextElement("div", "assistant-answer loading", "正在检索知识库并生成回答...");
+    const sourcesSection = document.createElement("section");
+    sourcesSection.className = "sources-section";
+    sourcesSection.hidden = true;
+
+    const sourcesHeading = createTextElement("div", "sources-heading", "Sources · 0");
+    const sourceList = document.createElement("div");
+    sourceList.className = "source-list";
+    sourcesSection.append(sourcesHeading, sourceList);
+
+    inner.append(createTextElement("div", "message-label", "RAG Builder"), answer, sourcesSection);
+    message.appendChild(inner);
+    chatMessages.appendChild(message);
+    return { answer, sourceList };
+}
+
+// 记录本次会话最近的问题，并刷新侧栏历史列表。
+function addRecentQuestion(question) {
+    recentQuestionItems = [question, ...recentQuestionItems.filter((item) => item !== question)].slice(0, 7);
+    renderRecentQuestions();
+}
+
+// 渲染侧栏最近问答，点击后可重新填入问题。
+function renderRecentQuestions() {
+    recentQuestions.innerHTML = "";
+
+    if (recentQuestionItems.length === 0) {
+        recentQuestions.appendChild(createTextElement("div", "sidebar-empty", "本次会话暂无问答"));
+        return;
+    }
+
+    recentQuestionItems.forEach((question) => {
+        const button = createButton(question, "history-item", () => {
+            setView("chat");
+            questionInput.value = question;
+            resizeQuestionInput();
+            questionInput.focus();
+        });
+        button.title = question;
+        recentQuestions.appendChild(button);
+    });
+}
+
+// 渲染侧栏最近 5 个文档的简洁列表。
 function renderRecentDocuments(documents) {
     recentDocuments.innerHTML = "";
     const recent = normalizeArray(documents).slice(0, 5);
 
     if (recent.length === 0) {
-        recentDocuments.appendChild(createMutedLine("暂无最近文档"));
+        recentDocuments.appendChild(createTextElement("div", "sidebar-empty", "暂无最近文档"));
         return;
     }
 
     recent.forEach((doc) => {
-        recentDocuments.appendChild(createTextElement("div", "recent-doc", doc.file_name ?? "未命名文档"));
+        const button = createButton(doc.file_name ?? "未命名文档", "history-item", () => setView("documents"));
+        button.title = `${doc.file_name ?? "未命名文档"} · ${doc.status ?? "UNKNOWN"}`;
+        recentDocuments.appendChild(button);
+    });
+}
+
+// 渲染日志面板中的文档选择器。
+function renderLogDocumentList(documents) {
+    logDocumentList.innerHTML = "";
+    const documentItems = normalizeArray(documents).map(normalizeDocument);
+
+    if (documentItems.length === 0) {
+        logDocumentList.appendChild(createEmptyState("暂无文档可查看"));
+        return;
+    }
+
+    documentItems.forEach((doc) => {
+        const button = createButton(doc.file_name, "document-picker-button", () => loadTaskLog(doc.doc_id));
+        button.classList.toggle("active", String(doc.doc_id) === String(lastSelectedDocId));
+        button.title = `doc_id=${doc.doc_id}`;
+        logDocumentList.appendChild(button);
     });
 }
 
@@ -419,7 +592,7 @@ function renderTaskLogs(logs) {
     taskLogContent.innerHTML = "";
 
     if (logItems.length === 0) {
-        taskLogContent.textContent = "暂无任务日志";
+        taskLogContent.appendChild(createEmptyState("暂无任务日志"));
         return;
     }
 
@@ -427,14 +600,14 @@ function renderTaskLogs(logs) {
         const item = document.createElement("article");
         item.className = "log-item";
 
-        const title = createTextElement("div", "log-title", log.task_name ?? "未命名任务");
         const meta = document.createElement("div");
         meta.className = "log-meta";
         appendMeta(meta, `status=${log.status ?? "-"}`);
         appendMeta(meta, `log_id=${log.id ?? "-"}`);
 
-        if ((log.chunk_count ?? log.chunkCount) !== undefined && (log.chunk_count ?? log.chunkCount) !== null) {
-            appendMeta(meta, `chunk_count=${log.chunk_count ?? log.chunkCount}`);
+        const chunkCount = log.chunk_count ?? log.chunkCount;
+        if (chunkCount !== undefined && chunkCount !== null) {
+            appendMeta(meta, `chunk_count=${chunkCount}`);
         }
 
         if (log.created_at) {
@@ -442,11 +615,75 @@ function renderTaskLogs(logs) {
         }
 
         const message = log.error_message ?? log.message ?? "暂无任务日志";
-        const body = createTextElement("div", "source-text", String(message));
-
-        item.append(title, meta, body);
+        item.append(
+            createTextElement("div", "log-title", log.task_name ?? "未命名任务"),
+            meta,
+            createTextElement("div", "source-text", String(message))
+        );
         taskLogContent.appendChild(item);
     });
+}
+
+// 重新派发失败文档的解析任务。
+async function retryDocument(docId) {
+    try {
+        const response = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/retry`, {
+            method: "POST"
+        });
+
+        if (!response.ok) {
+            throw new Error(await readResponseError(response));
+        }
+
+        const data = await response.json();
+        showNotice(data.message ?? `文档 ${docId} 已重新加入解析队列。`);
+        await loadDocuments();
+    } catch (error) {
+        showError(`重新解析失败：${getErrorText(error)}`);
+    }
+}
+
+// 删除指定文档，并在删除成功后刷新文档列表。
+async function deleteDocument(docId, fileName) {
+    const confirmed = window.confirm(`确定删除文档“${fileName}”吗？该操作会同时删除对应的向量片段。`);
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}`, {
+            method: "DELETE"
+        });
+
+        if (!response.ok) {
+            throw new Error(await readResponseError(response));
+        }
+
+        const data = await response.json();
+        showNotice(data.msg ?? "文档删除成功。");
+        await loadDocuments();
+    } catch (error) {
+        showError(`文档删除失败：${getErrorText(error)}`);
+    }
+}
+
+// 自动调整聊天输入框高度，避免输入内容被遮挡。
+function resizeQuestionInput() {
+    questionInput.style.height = "auto";
+    questionInput.style.height = `${Math.min(questionInput.scrollHeight, 180)}px`;
+}
+
+// 将聊天区域滚动到最新消息。
+function scrollChatToBottom() {
+    window.setTimeout(() => {
+        chatScroll.scrollTop = chatScroll.scrollHeight;
+    }, 0);
+}
+
+// 关闭移动端侧栏抽屉。
+function closeSidebar() {
+    document.body.classList.remove("sidebar-open");
 }
 
 // 从不同后端返回格式中提取数组。
@@ -521,11 +758,6 @@ function createTextElement(tagName, className, text) {
     return element;
 }
 
-// 生成普通提示行节点。
-function createMutedLine(text) {
-    return createTextElement("div", "muted-line", text);
-}
-
 // 生成空状态节点。
 function createEmptyState(text) {
     return createTextElement("div", "empty-state", text);
@@ -555,8 +787,10 @@ function renderKeyValues(container, rows) {
     rows.forEach(([key, value]) => {
         const row = document.createElement("div");
         row.className = "kv-row";
-        row.appendChild(createTextElement("span", "kv-key", key));
-        row.appendChild(createTextElement("span", "kv-value", String(value ?? "-")));
+        row.append(
+            createTextElement("span", "kv-key", key),
+            createTextElement("span", "kv-value", String(value ?? "-"))
+        );
         list.appendChild(row);
     });
 
