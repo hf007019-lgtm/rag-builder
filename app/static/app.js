@@ -196,9 +196,9 @@ async function askQuestion() {
         const sources = normalizeArray(data.sources);
 
         assistantMessage.answer.classList.remove("loading");
-        assistantMessage.answer.textContent = answer;
+        renderLimitedMarkdown(answer, assistantMessage.answer);
         renderSources(sources, assistantMessage.sourceList);
-        composerHint.textContent = `回答完成 · sources ${sources.length}`;
+        composerHint.textContent = `回答完成 · 引用来源 ${sources.length}`;
     } catch (error) {
         assistantMessage.answer.classList.remove("loading");
         assistantMessage.answer.classList.add("error");
@@ -282,7 +282,7 @@ function renderSources(sources, targetContainer = lastSourceContainer) {
     }
 
     if (heading) {
-        heading.textContent = `Sources · ${sourceItems.length}`;
+        heading.textContent = `引用来源 ${sourceItems.length}`;
     }
 
     if (sourceItems.length === 0) {
@@ -297,9 +297,15 @@ function renderSources(sources, targetContainer = lastSourceContainer) {
 
         const summary = document.createElement("summary");
         const fileName = source.file_name ?? source.filename ?? "未命名来源";
+        const chunkId = source.chunk_id ?? source.chunkId ?? index + 1;
+        const pageNumber = source.page_number ?? source.pageNumber;
+        const summaryMeta = pageNumber !== undefined && pageNumber !== null
+            ? `chunk ${chunkId} · 第 ${pageNumber} 页`
+            : `chunk ${chunkId}`;
+
         summary.append(
             createTextElement("span", "source-title", fileName),
-            createTextElement("span", "source-index", `来源 ${index + 1}`)
+            createTextElement("span", "source-index", summaryMeta)
         );
 
         const body = document.createElement("div");
@@ -308,9 +314,8 @@ function renderSources(sources, targetContainer = lastSourceContainer) {
         const meta = document.createElement("div");
         meta.className = "source-meta";
         appendMeta(meta, `doc_id=${source.doc_id ?? source.id ?? "-"}`);
-        appendMeta(meta, `chunk_id=${source.chunk_id ?? source.chunkId ?? index + 1}`);
+        appendMeta(meta, `chunk_id=${chunkId}`);
 
-        const pageNumber = source.page_number ?? source.pageNumber;
         if (pageNumber !== undefined && pageNumber !== null) {
             appendMeta(meta, `page=${pageNumber}`);
         }
@@ -513,7 +518,7 @@ function createAssistantMessage() {
     sourcesSection.className = "sources-section";
     sourcesSection.hidden = true;
 
-    const sourcesHeading = createTextElement("div", "sources-heading", "Sources · 0");
+    const sourcesHeading = createTextElement("div", "sources-heading", "引用来源 0");
     const sourceList = document.createElement("div");
     sourceList.className = "source-list";
     sourcesSection.append(sourcesHeading, sourceList);
@@ -522,6 +527,79 @@ function createAssistantMessage() {
     message.appendChild(inner);
     chatMessages.appendChild(message);
     return { answer, sourceList };
+}
+
+// 安全渲染有限 Markdown：支持加粗、段落换行和编号列表，其他内容始终按纯文本处理。
+function renderLimitedMarkdown(markdown, container) {
+    const lines = String(markdown ?? "").replace(/\r\n?/g, "\n").split("\n");
+    let paragraphLines = [];
+    let orderedList = null;
+
+    container.innerHTML = "";
+
+    const flushParagraph = () => {
+        if (paragraphLines.length === 0) {
+            return;
+        }
+
+        const paragraph = document.createElement("p");
+        paragraphLines.forEach((line, index) => {
+            if (index > 0) {
+                paragraph.appendChild(document.createElement("br"));
+            }
+
+            appendInlineMarkdown(paragraph, line);
+        });
+        container.appendChild(paragraph);
+        paragraphLines = [];
+    };
+
+    lines.forEach((line) => {
+        const orderedItem = line.match(/^\s*(\d+)[.)、]\s+(.+)$/);
+
+        if (orderedItem) {
+            flushParagraph();
+
+            if (!orderedList) {
+                orderedList = document.createElement("ol");
+                orderedList.start = Number(orderedItem[1]);
+                container.appendChild(orderedList);
+            }
+
+            const item = document.createElement("li");
+            appendInlineMarkdown(item, orderedItem[2]);
+            orderedList.appendChild(item);
+            return;
+        }
+
+        orderedList = null;
+
+        if (line.trim() === "") {
+            flushParagraph();
+            return;
+        }
+
+        paragraphLines.push(line);
+    });
+
+    flushParagraph();
+}
+
+// 安全渲染行内加粗语法，普通文本使用文本节点以避免 XSS。
+function appendInlineMarkdown(container, text) {
+    const value = String(text ?? "");
+    const boldPattern = /\*\*(.+?)\*\*/g;
+    let cursor = 0;
+    let match = boldPattern.exec(value);
+
+    while (match) {
+        container.appendChild(document.createTextNode(value.slice(cursor, match.index)));
+        container.appendChild(createTextElement("strong", "", match[1]));
+        cursor = match.index + match[0].length;
+        match = boldPattern.exec(value);
+    }
+
+    container.appendChild(document.createTextNode(value.slice(cursor)));
 }
 
 // 记录本次会话最近的问题，并刷新侧栏历史列表。

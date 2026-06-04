@@ -269,11 +269,11 @@ textarea:focus-visible {
 .workspace-title {
     color: var(--text);
     font-size: 14px;
-    font-weight: 650;
+    font-weight: 600;
 }
 
 .workspace-subtitle {
-    color: var(--text-muted);
+    color: rgba(178, 172, 162, 0.64);
     font-size: 11px;
 }
 
@@ -363,7 +363,7 @@ textarea:focus-visible {
 
 .assistant-message {
     display: grid;
-    gap: 12px;
+    gap: 14px;
     width: min(100%, 820px);
 }
 
@@ -374,15 +374,46 @@ textarea:focus-visible {
 }
 
 .assistant-answer {
+    width: min(100%, 800px);
     color: var(--text);
-    line-height: 1.82;
-    white-space: pre-wrap;
+    font-size: 15px;
+    font-weight: 400;
+    line-height: 1.86;
     overflow-wrap: anywhere;
+}
+
+.assistant-answer p {
+    margin: 0 0 16px;
+}
+
+.assistant-answer p:last-child {
+    margin-bottom: 0;
+}
+
+.assistant-answer strong {
+    color: #f7f1e8;
+    font-weight: 650;
+}
+
+.assistant-answer ol {
+    display: grid;
+    gap: 10px;
+    margin: 6px 0 18px;
+    padding-left: 24px;
+}
+
+.assistant-answer ol:last-child {
+    margin-bottom: 0;
+}
+
+.assistant-answer li {
+    padding-left: 4px;
 }
 
 .assistant-answer.loading,
 .assistant-answer.error {
     color: var(--text-secondary);
+    white-space: pre-wrap;
 }
 
 .assistant-answer.error {
@@ -391,17 +422,28 @@ textarea:focus-visible {
 
 .sources-section {
     display: grid;
-    gap: 8px;
-    margin-top: 5px;
+    gap: 10px;
+    width: min(100%, 800px);
+    margin-top: 8px;
+    padding-top: 14px;
+    border-top: 1px solid rgba(242, 237, 226, 0.075);
 }
 
 .sources-heading {
     display: flex;
     align-items: center;
     gap: 8px;
-    color: var(--text-muted);
+    color: var(--text-secondary);
     font-size: 12px;
     font-weight: 600;
+}
+
+.sources-heading::before {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(217, 119, 69, 0.72);
+    content: "";
 }
 
 .source-list {
@@ -410,13 +452,15 @@ textarea:focus-visible {
 }
 
 .source-item {
-    border: 1px solid var(--border);
-    border-radius: 11px;
-    background: rgba(242, 237, 226, 0.025);
+    border: 1px solid rgba(242, 237, 226, 0.075);
+    border-radius: 10px;
+    background: rgba(242, 237, 226, 0.018);
+    transition: border-color 150ms ease, background 150ms ease;
 }
 
 .source-item[open] {
-    background: rgba(242, 237, 226, 0.04);
+    border-color: rgba(242, 237, 226, 0.12);
+    background: rgba(242, 237, 226, 0.032);
 }
 
 .source-item summary {
@@ -424,8 +468,8 @@ textarea:focus-visible {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
     align-items: center;
-    min-height: 44px;
-    padding: 8px 12px;
+    min-height: 46px;
+    padding: 8px 13px;
     cursor: pointer;
     list-style: none;
 }
@@ -436,9 +480,9 @@ textarea:focus-visible {
 
 .source-title {
     overflow: hidden;
-    color: var(--text-secondary);
+    color: #d8d1c6;
     font-size: 13px;
-    font-weight: 600;
+    font-weight: 620;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -446,13 +490,18 @@ textarea:focus-visible {
 .source-index,
 .source-meta {
     color: var(--text-muted);
-    font-size: 11px;
+    font-size: 10px;
+}
+
+.source-index {
+    text-align: right;
+    white-space: nowrap;
 }
 
 .source-body {
     display: grid;
     gap: 8px;
-    padding: 0 12px 12px;
+    padding: 1px 13px 13px;
 }
 
 .source-meta,
@@ -464,9 +513,9 @@ textarea:focus-visible {
 }
 
 .source-text {
-    color: var(--text-secondary);
-    font-size: 13px;
-    line-height: 1.7;
+    color: rgba(178, 172, 162, 0.78);
+    font-size: 12px;
+    line-height: 1.72;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
 }
@@ -477,8 +526,8 @@ textarea:focus-visible {
     right: 0;
     bottom: 0;
     left: 0;
-    padding: 24px 22px 12px;
-    background: linear-gradient(to bottom, rgba(28, 27, 25, 0), var(--page) 35%);
+    padding: 20px 22px 10px;
+    background: linear-gradient(to bottom, rgba(28, 27, 25, 0), var(--page) 38%);
     pointer-events: none;
 }
 
@@ -490,22 +539,22 @@ textarea:focus-visible {
 
 .composer {
     display: grid;
-    gap: 8px;
-    padding: 12px;
-    border: 1px solid var(--border-strong);
-    border-radius: 24px;
-    background: var(--surface);
+    gap: 6px;
+    padding: 10px;
+    border: 1px solid rgba(242, 237, 226, 0.105);
+    border-radius: 22px;
+    background: rgba(37, 36, 33, 0.96);
     transition: border-color 150ms ease, background 150ms ease;
 }
 
 .composer:focus-within {
-    border-color: rgba(217, 119, 69, 0.5);
-    background: var(--surface-strong);
+    border-color: rgba(217, 119, 69, 0.32);
+    background: rgba(43, 42, 39, 0.98);
 }
 
 #questionInput {
     width: 100%;
-    min-height: 42px;
+    min-height: 38px;
     max-height: 180px;
     padding: 4px 7px;
     resize: none;
@@ -518,7 +567,7 @@ textarea:focus-visible {
 }
 
 #questionInput::placeholder {
-    color: var(--text-muted);
+    color: rgba(127, 122, 114, 0.72);
 }
 
 .composer-actions {
@@ -540,8 +589,8 @@ textarea:focus-visible {
 .send-button {
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
     border: 0;
     border-radius: 50%;
     transition: background 150ms ease, color 150ms ease, transform 150ms ease;
@@ -554,10 +603,10 @@ textarea:focus-visible {
 }
 
 .send-button {
-    background: var(--accent);
-    color: #20130d;
-    font-size: 21px;
-    font-weight: 700;
+    background: rgba(217, 119, 69, 0.78);
+    color: #251710;
+    font-size: 19px;
+    font-weight: 650;
 }
 
 .icon-button:hover {
@@ -566,7 +615,7 @@ textarea:focus-visible {
 }
 
 .send-button:hover {
-    background: var(--accent-hover);
+    background: rgba(225, 135, 87, 0.9);
 }
 
 .icon-button:active,
@@ -575,9 +624,9 @@ textarea:focus-visible {
 }
 
 .composer-note {
-    margin: 6px 0 0;
-    color: var(--text-muted);
-    font-size: 10px;
+    margin: 5px 0 0;
+    color: rgba(127, 122, 114, 0.68);
+    font-size: 9px;
     text-align: center;
 }
 
