@@ -258,3 +258,61 @@ http://127.0.0.1:18000/api/v1/health/dependencies
 - `/api/v1/search/ask` 能返回 `answer` 和 `sources`
 - `/api/v1/health/dependencies` 全部为 `ok`
 - 删除文档时 ES chunks 数量能正确返回
+
+## 15. 轻量 RAG 评测
+
+评测脚本复用现有 Elasticsearch 检索、Embedding 和问答服务，不启动 FastAPI、Worker 或浏览器。
+
+基础运行：
+
+```powershell
+python evals/run_retrieval_eval.py
+python evals/run_answer_eval.py
+```
+
+检索脚本默认计算：
+
+- `hit_rate@k`
+- `recall@k`
+- `precision@k`
+- `MRR`
+- `average_latency_ms`
+- `missing_expected_count`
+
+启用本地 rerank 对比：
+
+```powershell
+python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 10
+```
+
+也可以设置：
+
+```text
+RERANK_ENABLED=true
+RERANK_MODEL_NAME=BAAI/bge-reranker-base
+```
+
+`sentence-transformers` 是可选依赖。评测只加载本机已缓存模型，不会自动下载；依赖缺失、模型未缓存或推理失败时会自动降级，报告仍正常生成。
+
+用例文件：
+
+```text
+evals/cases/rag_retrieval_cases.json
+```
+
+有真实知识库数据后，建议按以下优先级填写预期结果：
+
+```text
+expected_chunk_ids
+-> expected_keywords
+-> expected_doc_ids
+```
+
+答案评测会检查来源命中、expected claims、不可回答问题的拒答行为，并用词面重叠启发式统计 `unsupported_claim_count`。当前接口没有标准 `citations` 字段，因此标准 citation coverage 按兼容约定显示为 `N/A`；脚本会额外输出 `sources` 兼容命中率。
+
+如果 ES 未启动、索引不存在或索引中没有 chunk，脚本不会崩溃，会在以下文件中记录“没有可评测数据”：
+
+```text
+evals/eval_report.md
+evals/eval_results.json
+```

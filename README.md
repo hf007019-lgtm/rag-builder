@@ -16,6 +16,7 @@ RAG Builder 是一个本地可运行的 RAG 后端项目，用 FastAPI 提供接
 - Elasticsearch 保存 chunk 和 vector
 - RAG 问答接口
 - sources 来源追踪
+- RAG 检索、rerank 对比和答案引用离线评测
 - task_logs 任务日志查询
 - 失败任务 retry
 - 依赖健康检查
@@ -84,6 +85,12 @@ worker/
 scripts/
   check_env.py         环境变量检查
   init_db.py           初始化数据库表
+
+evals/
+  cases/               检索与答案评测用例
+  run_retrieval_eval.py 检索和 rerank 对比
+  run_answer_eval.py   答案、引用和拒答评测
+  eval_report.md       最近一次评测报告
 
 docs/
   api.md               接口说明
@@ -168,6 +175,32 @@ python scripts/init_db.py
 调用 /api/v1/search/ask
 ```
 
+## 轻量 RAG 评测
+
+评测脚本直接复用现有检索和问答服务，不需要启动 FastAPI 或浏览器。实际评测前需要 Elasticsearch 中已有解析成功的 chunk，并且问答/Embedding 配置可用。
+
+```powershell
+python evals/run_retrieval_eval.py
+python evals/run_answer_eval.py
+```
+
+输出文件：
+
+```text
+evals/eval_report.md
+evals/eval_results.json
+```
+
+默认只评测 baseline。需要比较 rerank 时可以显式启用：
+
+```powershell
+python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 10
+```
+
+也可以通过 `RERANK_ENABLED` 和 `RERANK_MODEL_NAME` 配置默认行为。rerank 只尝试加载本机已缓存的 `sentence-transformers` CrossEncoder 模型，不会由评测脚本自动下载；依赖或模型不可用时会保留 baseline 排序并在报告中说明降级原因。
+
+当前样例 case 主要使用 `expected_keywords` 做弱评测。知识库数据稳定后，优先填写真实的 `expected_chunk_ids` 和 `expected_doc_ids`。现有接口没有标准 `citations` 字段，因此标准 citation coverage 会显示为 `N/A`，同时报告会额外给出 `sources` 兼容命中率。
+
 ## 当前边界
 
 这个仓库目前只做轻量级 RAG 后端，不追求完整 RAGFlow 或商业化平台能力。
@@ -175,7 +208,7 @@ python scripts/init_db.py
 后续可以继续补：
 
 - 更多文档格式
-- Rerank 二次排序
+- 将已验证有效的 rerank 策略接入在线问答链路
 - 更细的解析策略
 - 简单 Web 前端
 - 更完整的自动化测试

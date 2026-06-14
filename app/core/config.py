@@ -41,6 +41,21 @@ def get_optional_env(key: str, default: str) -> str:
     return os.getenv(key, default)
 
 
+# 定义读取布尔环境变量的函数
+# 作用：统一识别 true/false、1/0、yes/no 等常见写法
+def get_optional_bool_env(key: str, default: bool = False) -> bool:
+
+    # 把环境变量转成小写字符串，便于统一判断
+    raw_value = os.getenv(key)
+
+    # 没有配置时直接使用默认值
+    if raw_value is None:
+        return default
+
+    # 支持常见的布尔真值写法
+    return raw_value.strip().lower() in {"1", "true", "yes", "on"}
+
+
 # 定义项目配置类
 # 作用：统一管理数据库、MinIO、Redis、Elasticsearch、大模型等配置
 class Settings:
@@ -136,6 +151,20 @@ class Settings:
     CHAT_MODEL_NAME: str = get_optional_env(
         "CHAT_MODEL_NAME",
         "qwen-plus"
+    )
+
+    # 是否默认启用语义重排
+    # 当前只供离线 eval 使用，不接入主问答链路
+    RERANK_ENABLED: bool = get_optional_bool_env(
+        "RERANK_ENABLED",
+        False
+    )
+
+    # 语义重排模型名称
+    # 仅尝试加载本机已缓存模型，不会在运行评测时自动下载
+    RERANK_MODEL_NAME: str = get_optional_env(
+        "RERANK_MODEL_NAME",
+        "BAAI/bge-reranker-base"
     )
 
 

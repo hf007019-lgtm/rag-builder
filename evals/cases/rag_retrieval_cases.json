@@ -1,0 +1,180 @@
+[
+  {
+    "id": "case_001",
+    "query": "RAG 的全称和中文名称是什么？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [
+      "Retrieval-Augmented Generation",
+      "检索增强生成"
+    ],
+    "expected_claims": [
+      "RAG 的全称是 Retrieval-Augmented Generation",
+      "RAG 中文通常叫检索增强生成"
+    ],
+    "unanswerable": false,
+    "tags": [
+      "retrieval",
+      "rag_basics"
+    ]
+  },
+  {
+    "id": "case_002",
+    "query": "RAG 系统生成回答前要经过哪些核心步骤？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [
+      "检索",
+      "上下文",
+      "大模型"
+    ],
+    "expected_claims": [
+      "系统先从知识库检索与问题相关的内容",
+      "检索内容会作为上下文交给大模型生成回答"
+    ],
+    "unanswerable": false,
+    "tags": [
+      "retrieval",
+      "rag_flow"
+    ]
+  },
+  {
+    "id": "case_003",
+    "query": "项目中的 PostgreSQL、MinIO、Redis、Celery 和 Elasticsearch 分别负责什么？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [
+      "PostgreSQL",
+      "MinIO",
+      "Redis",
+      "Celery",
+      "Elasticsearch"
+    ],
+    "expected_claims": [
+      "PostgreSQL 用于保存文档元数据",
+      "MinIO 用于保存原始文件",
+      "Redis 和 Celery 用于异步任务调度",
+      "Elasticsearch 用于保存文本切片和向量"
+    ],
+    "unanswerable": false,
+    "tags": [
+      "retrieval",
+      "architecture"
+    ]
+  },
+  {
+    "id": "case_004",
+    "query": "文档上传后后台如何完成解析和向量入库？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [
+      "Celery Worker",
+      "解析",
+      "清洗",
+      "切块",
+      "向量化"
+    ],
+    "expected_claims": [
+      "Celery Worker 从 MinIO 读取原始文件",
+      "后台任务执行解析、清洗、切块和向量化",
+      "处理后的 chunk 会写入 Elasticsearch"
+    ],
+    "unanswerable": false,
+    "tags": [
+      "retrieval",
+      "ingestion"
+    ]
+  },
+  {
+    "id": "case_005",
+    "query": "RAG 对降低幻觉和来源追踪有什么帮助？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [
+      "减少大模型幻觉",
+      "可追溯"
+    ],
+    "expected_claims": [
+      "RAG 可以减少大模型幻觉",
+      "RAG 可以提高回答的准确性和可追溯性"
+    ],
+    "unanswerable": false,
+    "tags": [
+      "retrieval",
+      "quality"
+    ]
+  },
+  {
+    "id": "case_006",
+    "query": "任务日志会记录哪些文档处理结果？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [
+      "task_logs",
+      "任务状态",
+      "chunk 数量",
+      "错误信息"
+    ],
+    "expected_claims": [
+      "任务日志会记录任务状态",
+      "任务日志会记录 chunk 数量和失败原因"
+    ],
+    "unanswerable": false,
+    "tags": [
+      "retrieval",
+      "observability"
+    ]
+  },
+  {
+    "id": "case_007",
+    "query": "公司今年的年终奖具体发放多少个月工资？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [],
+    "expected_claims": [],
+    "unanswerable": true,
+    "tags": [
+      "answer",
+      "unanswerable"
+    ]
+  },
+  {
+    "id": "case_chitchat_001",
+    "query": "你好",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [],
+    "expected_claims": [],
+    "unanswerable": false,
+    "expected_answer_type": "chitchat",
+    "should_use_retrieval": false,
+    "expected_citations_count": 0,
+    "forbidden_claims": [
+      "知识库中没有找到足够依据"
+    ],
+    "tags": [
+      "answer",
+      "chitchat"
+    ]
+  },
+  {
+    "id": "case_unrelated_001",
+    "query": "今天北京天气怎么样？",
+    "expected_chunk_ids": [],
+    "expected_doc_ids": [],
+    "expected_keywords": [],
+    "expected_claims": [],
+    "unanswerable": true,
+    "expected_answer_type": "unanswerable",
+    "should_use_retrieval": true,
+    "expected_citations_count": 0,
+    "forbidden_behavior": [
+      "展示无关 chunk 引用"
+    ],
+    "tags": [
+      "answer",
+      "unanswerable",
+      "unrelated"
+    ]
+  }
+]

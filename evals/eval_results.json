@@ -1,0 +1,326 @@
+{
+  "retrieval": {
+    "status": "completed",
+    "case_count": 9,
+    "knowledge_base_chunk_count": 13,
+    "top_k": 3,
+    "top_n": 10,
+    "baseline": {
+      "evaluated_case_count": 6,
+      "hit_rate_at_k": 1.0,
+      "recall_at_k": 0.875,
+      "precision_at_k": 0.6666666666666666,
+      "mrr": 1.0,
+      "missing_expected_count": 2
+    },
+    "rerank": {
+      "evaluated_case_count": 0,
+      "hit_rate_at_k": null,
+      "recall_at_k": null,
+      "precision_at_k": null,
+      "mrr": null,
+      "missing_expected_count": 0
+    },
+    "rerank_enabled": false,
+    "rerank_status": "disabled",
+    "delta_hit_rate": null,
+    "delta_mrr": null,
+    "average_latency_ms": 455.3052833334732,
+    "message": "语义重排未启用，本次仅评测 baseline 检索",
+    "failures": [],
+    "notes": [
+      "示例 case 默认使用 expected_keywords 弱评测；有真实 ID 后优先填写 expected_chunk_ids。",
+      "语义重排未启用，本次仅评测 baseline 检索"
+    ],
+    "details": [
+      {
+        "case_id": "case_001",
+        "query": "RAG 的全称和中文名称是什么？",
+        "baseline": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 0.6666666666666666,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "rerank": null,
+        "latency_ms": 1809.97
+      },
+      {
+        "case_id": "case_002",
+        "query": "RAG 系统生成回答前要经过哪些核心步骤？",
+        "baseline": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 0.6666666666666666,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "rerank": null,
+        "latency_ms": 165.49
+      },
+      {
+        "case_id": "case_003",
+        "query": "项目中的 PostgreSQL、MinIO、Redis、Celery 和 Elasticsearch 分别负责什么？",
+        "baseline": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 1.0,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "rerank": null,
+        "latency_ms": 191.24
+      },
+      {
+        "case_id": "case_004",
+        "query": "文档上传后后台如何完成解析和向量入库？",
+        "baseline": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 0.6666666666666666,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "rerank": null,
+        "latency_ms": 191.52
+      },
+      {
+        "case_id": "case_005",
+        "query": "RAG 对降低幻觉和来源追踪有什么帮助？",
+        "baseline": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 0.5,
+          "precision": 0.3333333333333333,
+          "mrr": 1.0,
+          "missing_expected_count": 1
+        },
+        "rerank": null,
+        "latency_ms": 155.04
+      },
+      {
+        "case_id": "case_006",
+        "query": "任务日志会记录哪些文档处理结果？",
+        "baseline": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 0.75,
+          "precision": 0.6666666666666666,
+          "mrr": 1.0,
+          "missing_expected_count": 1
+        },
+        "rerank": null,
+        "latency_ms": 218.57
+      },
+      {
+        "case_id": "case_007",
+        "skipped": true,
+        "reason": "该用例不参与正向检索指标"
+      },
+      {
+        "case_id": "case_chitchat_001",
+        "skipped": true,
+        "reason": "该用例不参与正向检索指标"
+      },
+      {
+        "case_id": "case_unrelated_001",
+        "skipped": true,
+        "reason": "该用例不参与正向检索指标"
+      }
+    ]
+  },
+  "generated_at": "2026-06-14T15:50:04+08:00",
+  "answer": {
+    "status": "completed",
+    "case_count": 9,
+    "answer_case_count": 9,
+    "knowledge_base_chunk_count": 13,
+    "citation_field_mode": "citations",
+    "citation_coverage_rate": 1.0,
+    "source_compat_coverage_rate": null,
+    "expected_claim_hit_rate": 0.9333333333333333,
+    "unsupported_claim_count": 0,
+    "unanswerable_abstention_rate": 1.0,
+    "average_latency_ms": 1300.0934888888069,
+    "message": "答案、引用与意图行为评测完成",
+    "failures": [
+      {
+        "stage": "answer",
+        "case_id": "case_005",
+        "query": "RAG 对降低幻觉和来源追踪有什么帮助？",
+        "failure_reason": "expected claims 命中 1/2"
+      }
+    ],
+    "notes": [
+      "优先评估标准 citations；旧版 sources 仍作为兼容字段支持。",
+      "answer_type、used_retrieval 和预期引用数量按用例可选字段校验。",
+      "expected claim 使用精确包含和字符二元组召回率进行轻量判断。"
+    ],
+    "details": [
+      {
+        "case_id": "case_001",
+        "query": "RAG 的全称和中文名称是什么？",
+        "citation_field_mode": "citations",
+        "answer_type": "grounded",
+        "used_retrieval": true,
+        "citations_count": 1,
+        "citation": {
+          "eligible": true,
+          "covered": true,
+          "mode": "keyword"
+        },
+        "expected_claim_count": 2,
+        "expected_claim_hit_count": 2,
+        "unsupported_claim_count": 0,
+        "abstained": false
+      },
+      {
+        "case_id": "case_002",
+        "query": "RAG 系统生成回答前要经过哪些核心步骤？",
+        "citation_field_mode": "citations",
+        "answer_type": "grounded",
+        "used_retrieval": true,
+        "citations_count": 1,
+        "citation": {
+          "eligible": true,
+          "covered": true,
+          "mode": "keyword"
+        },
+        "expected_claim_count": 2,
+        "expected_claim_hit_count": 2,
+        "unsupported_claim_count": 0,
+        "abstained": false
+      },
+      {
+        "case_id": "case_003",
+        "query": "项目中的 PostgreSQL、MinIO、Redis、Celery 和 Elasticsearch 分别负责什么？",
+        "citation_field_mode": "citations",
+        "answer_type": "grounded",
+        "used_retrieval": true,
+        "citations_count": 1,
+        "citation": {
+          "eligible": true,
+          "covered": true,
+          "mode": "keyword"
+        },
+        "expected_claim_count": 4,
+        "expected_claim_hit_count": 4,
+        "unsupported_claim_count": 0,
+        "abstained": false
+      },
+      {
+        "case_id": "case_004",
+        "query": "文档上传后后台如何完成解析和向量入库？",
+        "citation_field_mode": "citations",
+        "answer_type": "grounded",
+        "used_retrieval": true,
+        "citations_count": 1,
+        "citation": {
+          "eligible": true,
+          "covered": true,
+          "mode": "keyword"
+        },
+        "expected_claim_count": 3,
+        "expected_claim_hit_count": 3,
+        "unsupported_claim_count": 0,
+        "abstained": false
+      },
+      {
+        "case_id": "case_005",
+        "query": "RAG 对降低幻觉和来源追踪有什么帮助？",
+        "citation_field_mode": "citations",
+        "answer_type": "grounded",
+        "used_retrieval": true,
+        "citations_count": 1,
+        "citation": {
+          "eligible": true,
+          "covered": true,
+          "mode": "keyword"
+        },
+        "expected_claim_count": 2,
+        "expected_claim_hit_count": 1,
+        "unsupported_claim_count": 0,
+        "abstained": false
+      },
+      {
+        "case_id": "case_006",
+        "query": "任务日志会记录哪些文档处理结果？",
+        "citation_field_mode": "citations",
+        "answer_type": "grounded",
+        "used_retrieval": true,
+        "citations_count": 1,
+        "citation": {
+          "eligible": true,
+          "covered": true,
+          "mode": "keyword"
+        },
+        "expected_claim_count": 2,
+        "expected_claim_hit_count": 2,
+        "unsupported_claim_count": 0,
+        "abstained": false
+      },
+      {
+        "case_id": "case_007",
+        "query": "公司今年的年终奖具体发放多少个月工资？",
+        "citation_field_mode": "citations",
+        "answer_type": "unanswerable",
+        "used_retrieval": true,
+        "citations_count": 0,
+        "citation": {
+          "eligible": false,
+          "covered": null,
+          "mode": "none"
+        },
+        "expected_claim_count": 0,
+        "expected_claim_hit_count": 0,
+        "unsupported_claim_count": 0,
+        "abstained": true
+      },
+      {
+        "case_id": "case_chitchat_001",
+        "query": "你好",
+        "citation_field_mode": "citations",
+        "answer_type": "chitchat",
+        "used_retrieval": false,
+        "citations_count": 0,
+        "citation": {
+          "eligible": false,
+          "covered": null,
+          "mode": "none"
+        },
+        "expected_claim_count": 0,
+        "expected_claim_hit_count": 0,
+        "unsupported_claim_count": 0,
+        "abstained": false
+      },
+      {
+        "case_id": "case_unrelated_001",
+        "query": "今天北京天气怎么样？",
+        "citation_field_mode": "citations",
+        "answer_type": "unanswerable",
+        "used_retrieval": true,
+        "citations_count": 0,
+        "citation": {
+          "eligible": false,
+          "covered": null,
+          "mode": "none"
+        },
+        "expected_claim_count": 0,
+        "expected_claim_hit_count": 0,
+        "unsupported_claim_count": 0,
+        "abstained": true
+      }
+    ]
+  }
+}
