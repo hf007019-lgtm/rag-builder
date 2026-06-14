@@ -84,6 +84,25 @@ def list_documents():
         # 查询所有文档，并按 ID 倒序排列
         docs = db.query(Document).order_by(Document.id.desc()).all()
 
+        # 一次读取任务日志，补充最近一次可用的 chunk 数量。
+        doc_ids = [doc.id for doc in docs]
+        chunk_count_by_doc_id = {}
+
+        if doc_ids:
+            logs = (
+                db.query(TaskLog)
+                .filter(TaskLog.doc_id.in_(doc_ids))
+                .order_by(TaskLog.id.desc())
+                .all()
+            )
+
+            for log in logs:
+                if (
+                    log.doc_id not in chunk_count_by_doc_id
+                    and log.chunk_count is not None
+                ):
+                    chunk_count_by_doc_id[log.doc_id] = log.chunk_count
+
         # 创建结果列表
         result = []
 
@@ -94,7 +113,9 @@ def list_documents():
             result.append({
                 "id": doc.id,
                 "file_name": doc.file_name,
-                "status": doc.status
+                "status": doc.status,
+                "created_at": doc.created_at,
+                "chunk_count": chunk_count_by_doc_id.get(doc.id)
             })
 
         # 返回文档列表

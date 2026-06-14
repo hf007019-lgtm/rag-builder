@@ -61,10 +61,14 @@ GET /api/v1/documents/
   {
     "id": 15,
     "file_name": "rag_test_01.txt",
-    "status": "SUCCESS"
+    "status": "SUCCESS",
+    "created_at": "2026-06-01T22:22:44",
+    "chunk_count": 3
   }
 ]
 ```
+
+`chunk_count` 来自最近一次包含统计结果的解析任务；暂无统计时为 `null`。
 
 ## 文档状态
 
@@ -200,7 +204,19 @@ POST /api/v1/search/ask
 ```json
 {
   "answer": "RAG 是检索增强生成，会先检索相关知识，再结合上下文生成回答。",
+  "answer_type": "grounded",
+  "used_retrieval": true,
   "sources": [
+    {
+      "doc_id": 15,
+      "file_name": "rag_test_01.txt",
+      "chunk_id": "doc_15_chunk_0",
+      "page_number": null,
+      "chunk_text": "RAG 的全称是 Retrieval-Augmented Generation...",
+      "score": 4.12
+    }
+  ],
+  "citations": [
     {
       "doc_id": 15,
       "file_name": "rag_test_01.txt",
@@ -212,6 +228,17 @@ POST /api/v1/search/ask
   ]
 }
 ```
+
+字段说明：
+
+| 字段 | 说明 |
+|---|---|
+| `answer_type` | `grounded`、`unanswerable` 或 `chitchat` |
+| `used_retrieval` | 本次回答是否执行知识库检索 |
+| `citations` | 标准引用字段 |
+| `sources` | 为兼容现有调用方保留，与 `citations` 内容一致 |
+
+普通问候和使用说明会直接返回 `chitchat`，不会调用 Embedding 或 Elasticsearch。检索结果不足或模型最终拒答时返回 `unanswerable`，并保证 `sources`、`citations` 都为空。
 
 ## 健康检查
 
@@ -229,6 +256,68 @@ GET /api/v1/health
   "message": "RAG FastAPI 服务运行正常"
 }
 ```
+
+## 企业控制台评测报告
+
+接口：
+
+```http
+GET /api/v1/eval/report
+```
+
+用途：只读加载 `evals/eval_results.json` 和 `evals/eval_report.md`，供控制台展示最近一次离线评测指标与失败用例。接口不会运行评测脚本，也不会修改评测产物。
+
+主要返回字段：
+
+| 字段 | 说明 |
+|---|---|
+| `available` | 是否读取到评测产物 |
+| `generated_at` | 最近评测生成时间 |
+| `retrieval` | 检索评测原始指标 |
+| `answer` | 答案与引用评测原始指标 |
+| `failures` | 汇总后的失败用例 |
+| `report_markdown` | Markdown 报告原文 |
+| `message` | 当前读取状态说明 |
+
+## 企业控制台系统状态
+
+接口：
+
+```http
+GET /api/v1/system/status
+```
+
+用途：汇总控制台需要的运行状态。PostgreSQL、MinIO、Redis、Elasticsearch 执行现有依赖检查；Celery 尝试 ping Worker；Embedding、LLM 和 Rerank 只展示配置状态，不主动发起模型调用。
+
+状态可能包括：
+
+| 状态 | 说明 |
+|---|---|
+| `ok` | 实际检查正常 |
+| `error` | 实际检查异常 |
+| `configured` | 已配置，但本接口未主动调用验证 |
+| `disabled` | 当前未启用 |
+| `unknown` | 无法确认运行状态 |
+
+## 独立检索调试
+
+接口：
+
+```http
+GET /api/v1/retrieval/test?query=RAG&top_k=5&use_rerank=false
+```
+
+用途：复用现有问题 Embedding 和 Elasticsearch Hybrid 检索能力返回排序后的 chunk，不调用 Chat 模型。`use_rerank=true` 时只尝试加载本机已有的 rerank 模型；模型不可用会保留 baseline 排序并返回降级状态。
+
+查询参数：
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `query` | string | 必填，1 到 1000 个字符 |
+| `top_k` | integer | 可选，范围 1 到 20，默认 5 |
+| `use_rerank` | boolean | 可选，是否尝试本地语义重排 |
+
+结果中的 `vector_score`、`keyword_score`、`rerank_score` 可能为空；控制台只展示后端实际返回的分数字段。
 
 依赖检查：
 
@@ -255,12 +344,12 @@ GET /api/v1/health/dependencies
     "redis": {
       "name": "Redis",
       "status": "ok",
-      "message": "Redis 连接正常：redis://127.0.0.1:16379/0"
+      "message": "Redis 连接正常"
     },
     "elasticsearch": {
       "name": "Elasticsearch",
       "status": "ok",
-      "message": "Elasticsearch 连接正常：http://127.0.0.1:9200"
+      "message": "Elasticsearch 连接正常"
     }
   }
 }

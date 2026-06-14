@@ -51,7 +51,7 @@ def build_error_result(name: str, error: Exception):
     return {
         "name": name,
         "status": "error",
-        "message": str(error)
+        "message": f"{name} 检查失败：{type(error).__name__}"
     }
 
 
@@ -159,7 +159,7 @@ def check_redis():
         # 返回成功结果
         return build_ok_result(
             name="Redis",
-            message=f"Redis 连接正常：{redis_url}"
+            message="Redis 连接正常"
         )
 
     # 如果 Redis 检查失败
@@ -207,7 +207,7 @@ def check_elasticsearch():
         # 返回成功结果
         return build_ok_result(
             name="Elasticsearch",
-            message=f"Elasticsearch 连接正常：{es_url}"
+            message="Elasticsearch 连接正常"
         )
 
     # 如果 ES 检查失败

@@ -1,6 +1,7 @@
 # 导入 os 模块
 # 作用：读取 .env 或系统环境变量里的 CHAT_MODEL_NAME
 import os
+import re
 
 
 # 从 FastAPI 导入 HTTPException
@@ -31,15 +32,8 @@ from app.services.prompt_service import (
 )
 
 
-# 创建 DeepDocEngine 实例
-# 作用：用于问题向量化和调用大模型回答
-# 注意：这里会初始化 OpenAI 兼容客户端，读取 LLM_API_KEY 和 LLM_BASE_URL
-search_engine = DeepDocEngine()
-
-
-# 创建 VectorStore 实例
-# 作用：连接 Elasticsearch，并用于后续 hybrid_search 检索相关 chunk
-vector_store = VectorStore()
+_search_engine = None
+_vector_store = None
 
 
 # 从环境变量读取聊天模型名称
@@ -60,6 +54,171 @@ MIN_RELEVANCE_SCORE = 0.6
 # 动态阈值比例
 # 作用：只保留接近最高分的结果，避免低分无关内容混进来
 RELATIVE_SCORE_RATIO = 0.65
+
+
+CHITCHAT_INTENTS = {
+    "你好",
+    "您好",
+    "你好呀",
+    "你好啊",
+    "hi",
+    "hello",
+    "在吗",
+    "你是谁",
+    "你能做什么",
+    "怎么使用",
+    "如何上传文档",
+    "怎么问问题"
+}
+
+CHITCHAT_ANSWER = (
+    "你好，我是 RAG Builder 知识库助手。你可以先上传文档，"
+    "等待解析完成后，再向我提问文档中的内容。"
+    "我会尽量基于知识库内容回答，并展示引用来源。"
+)
+
+
+def get_search_engine():
+    """延迟初始化模型客户端，让闲聊请求不依赖检索组件。"""
+    global _search_engine
+
+    if _search_engine is None:
+        _search_engine = DeepDocEngine()
+
+    return _search_engine
+
+
+def get_vector_store():
+    """延迟连接 Elasticsearch，避免闲聊触发检索初始化。"""
+    global _vector_store
+
+    if _vector_store is None:
+        _vector_store = VectorStore()
+
+    return _vector_store
+
+
+def normalize_intent_text(question: str) -> str:
+    """移除常见空白和标点，供轻量意图规则稳定匹配。"""
+    return re.sub(
+        r"[\s，。！？!?、,.：:；;~～…]+",
+        "",
+        question
+    ).lower()
+
+
+def is_chitchat_question(question: str) -> bool:
+    return normalize_intent_text(question) in CHITCHAT_INTENTS
+
+
+def is_no_answer_response(answer: str) -> bool:
+    normalized_answer = str(answer or "").strip()
+    return any(
+        phrase in normalized_answer
+        for phrase in (
+            "知识库中没有找到足够依据",
+            "没有找到足够依据",
+            "没有足够依据",
+            "无法确定"
+        )
+    )
+
+
+def normalize_source(source: dict) -> dict:
+    """统一 ES 与兼容字段，避免前端收到结构不一致的引用。"""
+    metadata = source.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+
+    doc_id = (
+        source.get("doc_id")
+        or source.get("document_id")
+        or source.get("source_id")
+        or metadata.get("doc_id")
+        or metadata.get("document_id")
+    )
+    chunk_id = (
+        source.get("chunk_id")
+        or source.get("chunkId")
+        or metadata.get("chunk_id")
+        or source.get("id")
+    )
+    file_name = (
+        source.get("document_name")
+        or source.get("filename")
+        or source.get("file_name")
+        or source.get("doc_name")
+        or source.get("source_name")
+        or metadata.get("filename")
+        or metadata.get("document_name")
+        or metadata.get("file_name")
+    )
+    if str(file_name or "").strip().lower() in {
+        "",
+        "未命名来源",
+        "undefined",
+        "null"
+    }:
+        file_name = None
+    if not file_name:
+        if chunk_id:
+            file_name = f"来源：{chunk_id}"
+        elif doc_id:
+            doc_token = str(doc_id)
+            file_name = (
+                f"来源：{doc_token}"
+                if doc_token.startswith("doc_")
+                else f"来源：doc_{doc_token}"
+            )
+        else:
+            file_name = "未知来源"
+
+    return {
+        "doc_id": doc_id,
+        "file_name": file_name,
+        "chunk_id": chunk_id,
+        "page_number": (
+            source.get("page_number")
+            if source.get("page_number") is not None
+            else source.get("page")
+            if source.get("page") is not None
+            else metadata.get("page_number")
+        ),
+        "chunk_text": (
+            source.get("preview")
+            or source.get("text_preview")
+            or source.get("content")
+            or source.get("chunk_text")
+            or source.get("text")
+            or metadata.get("preview")
+            or metadata.get("text_preview")
+            or metadata.get("content")
+            or metadata.get("chunk_text")
+            or ""
+        ),
+        "score": (
+            source.get("score")
+            if source.get("score") is not None
+            else source.get("_score")
+            if source.get("_score") is not None
+            else source.get("similarity")
+        )
+    }
+
+
+def build_answer_response(
+    answer: str,
+    answer_type: str,
+    used_retrieval: bool,
+    sources: list
+) -> dict:
+    normalized_sources = [normalize_source(item) for item in sources]
+    return {
+        "answer": answer,
+        "sources": normalized_sources,
+        "citations": normalized_sources,
+        "answer_type": answer_type,
+        "used_retrieval": used_retrieval
+    }
 
 
 # 根据用户问题判断目标文件类型
@@ -255,6 +414,7 @@ def embed_question(question: str) -> list:
     # 调用 Embedding 接口
     # input=[question] 表示只对用户问题生成一个向量
     # model=search_engine.embed_model_name 表示使用当前配置的 Embedding 模型
+    search_engine = get_search_engine()
     response = search_engine.client.embeddings.create(
         input=[question],
         model=search_engine.embed_model_name
@@ -284,6 +444,15 @@ def ask_question(question: str):
     # 作用：让后续检索更干净
     question = question.strip()
 
+    # 闲聊和使用说明直接返回，不初始化 Embedding 或 Elasticsearch。
+    if is_chitchat_question(question):
+        return build_answer_response(
+            answer=CHITCHAT_ANSWER,
+            answer_type="chitchat",
+            used_retrieval=False,
+            sources=[]
+        )
+
     # 根据用户问题判断目标文件类型
     # 例如用户提到 PDF，就自动优先使用 PDF 文件
     target_suffix = detect_target_file_suffix(question)
@@ -302,7 +471,7 @@ def ask_question(question: str):
     # query_text 用于关键词检索
     # query_vector 用于向量检索
     # top_k 表示最多召回多少个候选 chunk
-    retrieved_chunks = vector_store.hybrid_search(
+    retrieved_chunks = get_vector_store().hybrid_search(
         query_text=question,
         query_vector=query_vector,
         top_k=RETRIEVAL_TOP_K
@@ -312,10 +481,12 @@ def ask_question(question: str):
     if not retrieved_chunks:
 
         # 返回统一的无答案文本
-        return {
-            "answer": build_no_answer_text(),
-            "sources": []
-        }
+        return build_answer_response(
+            answer=build_no_answer_text(),
+            answer_type="unanswerable",
+            used_retrieval=True,
+            sources=[]
+        )
 
     # 先按文件类型过滤
     # 作用：用户问 PDF 时，尽量过滤掉 TXT 等其他文件类型
@@ -336,10 +507,12 @@ def ask_question(question: str):
     if not relevant_chunks:
 
         # 返回统一的无答案文本
-        return {
-            "answer": build_no_answer_text(),
-            "sources": []
-        }
+        return build_answer_response(
+            answer=build_no_answer_text(),
+            answer_type="unanswerable",
+            used_retrieval=True,
+            sources=[]
+        )
 
     # 调用 prompt_service.py 里的 build_context_text
     # 作用：把 sources 列表统一拼成知识库上下文
@@ -355,6 +528,7 @@ def ask_question(question: str):
     # 调用大模型生成最终答案
     # model 使用 CHAT_MODEL_NAME，默认是 qwen-plus
     # messages 中 system 负责约束规则，user 负责提供上下文和问题
+    search_engine = get_search_engine()
     chat_response = search_engine.client.chat.completions.create(
         model=CHAT_MODEL_NAME,
         messages=[
@@ -373,10 +547,21 @@ def ask_question(question: str):
     # choices[0].message.content 是模型生成的文本内容
     final_answer = chat_response.choices[0].message.content
 
+    # 模型最终拒答时，不能继续把候选 chunk 当成有效引用返回。
+    if is_no_answer_response(final_answer):
+        return build_answer_response(
+            answer=build_no_answer_text(),
+            answer_type="unanswerable",
+            used_retrieval=True,
+            sources=[]
+        )
+
     # 返回最终答案和过滤后的来源信息
     # answer 给用户看
     # sources 给前端展示来源、文件名、chunk、页码和分数
-    return {
-        "answer": final_answer,
-        "sources": relevant_chunks
-    }
+    return build_answer_response(
+        answer=final_answer,
+        answer_type="grounded",
+        used_retrieval=True,
+        sources=relevant_chunks
+    )

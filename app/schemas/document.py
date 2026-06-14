@@ -82,6 +82,12 @@ class DocumentListItem(BaseModel):
     # 作用：展示当前文档解析状态
     status: str
 
+    # 上传时间
+    created_at: Optional[datetime] = None
+
+    # 最近一次成功解析生成的 chunk 数
+    chunk_count: Optional[int] = None
+
 
 # 定义上传文档响应模型
 # 作用：规定上传接口返回给前端的数据格式

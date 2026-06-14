@@ -23,10 +23,7 @@ from app.api.v1.document import router as document_router
 # 从 RAG 问答接口文件导入 router
 # 作用：把 search.py 里的问答接口注册到主应用
 from app.api.v1.search import router as search_router
-
-# 导入健康检查路由
-from app.api.v1 import health
-
+from app.api.v1.console import router as console_router
 
 # 调用本地代理防御函数
 # 作用：让 PostgreSQL、MinIO、Redis、ES 这些本地服务不走代理
@@ -68,14 +65,13 @@ app.include_router(
     tags=["Search"]
 )
 
-# 注册健康检查路由
-# 最终路径前缀是 /api/v1/health
-app.include_router(
-    health.router,
-    prefix="/api/v1/health",
-    tags=["health"]
-)
 
+# 注册企业控制台只读与检索调试接口
+app.include_router(
+    console_router,
+    prefix="/api/v1",
+    tags=["Console"]
+)
 
 # 挂载前端静态资源目录
 # 作用：让浏览器可以访问 /static/styles.css 和 /static/app.js
