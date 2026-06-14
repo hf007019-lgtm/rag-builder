@@ -197,7 +197,19 @@ evals/eval_results.json
 python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 10
 ```
 
-也可以通过 `RERANK_ENABLED` 和 `RERANK_MODEL_NAME` 配置默认行为。rerank 只尝试加载本机已缓存的 `sentence-transformers` CrossEncoder 模型，不会由评测脚本自动下载；依赖或模型不可用时会保留 baseline 排序并在报告中说明降级原因。
+rerank 使用 DashScope 文本重排序接口和 `qwen3-rerank`。API Key 优先读取 `DASHSCOPE_API_KEY`，未配置时复用项目已有的 `LLM_API_KEY`，不会写入代码或报告。常用配置：
+
+```text
+RERANK_ENABLED=false
+RERANK_PROVIDER=dashscope
+RERANK_MODEL_NAME=qwen3-rerank
+RERANK_TOP_N=30
+RERANK_TOP_K=5
+RERANK_TIMEOUT_SECONDS=20
+RERANK_APPLY_TO_ASK=false
+```
+
+远端调用失败时会保留 baseline 排序并在报告中说明降级原因。`RERANK_APPLY_TO_ASK=false` 时，正式问答链路保持原有行为。
 
 当前样例 case 主要使用 `expected_keywords` 做弱评测。知识库数据稳定后，优先填写真实的 `expected_chunk_ids` 和 `expected_doc_ids`。现有接口没有标准 `citations` 字段，因此标准 citation coverage 会显示为 `N/A`，同时报告会额外给出 `sources` 兼容命中率。
 
@@ -208,7 +220,7 @@ python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 10
 后续可以继续补：
 
 - 更多文档格式
-- 将已验证有效的 rerank 策略接入在线问答链路
+- 通过固定评测集验证 rerank 效果，再决定是否打开正式问答开关
 - 更细的解析策略
 - 简单 Web 前端
 - 更完整的自动化测试

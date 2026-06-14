@@ -304,10 +304,10 @@ GET /api/v1/system/status
 接口：
 
 ```http
-GET /api/v1/retrieval/test?query=RAG&top_k=5&use_rerank=false
+GET /api/v1/retrieval/test?query=RAG&top_k=5&top_n=30&use_rerank=false
 ```
 
-用途：复用现有问题 Embedding 和 Elasticsearch Hybrid 检索能力返回排序后的 chunk，不调用 Chat 模型。`use_rerank=true` 时只尝试加载本机已有的 rerank 模型；模型不可用会保留 baseline 排序并返回降级状态。
+用途：复用现有问题 Embedding 和 Elasticsearch Hybrid 检索能力返回排序后的 chunk，不调用 Chat 模型。`use_rerank=true` 时会对 baseline top_n 调用 DashScope `qwen3-rerank`；远端调用失败会保留 baseline 排序并返回 `fallback` 状态。
 
 查询参数：
 
@@ -315,9 +315,10 @@ GET /api/v1/retrieval/test?query=RAG&top_k=5&use_rerank=false
 |---|---|---|
 | `query` | string | 必填，1 到 1000 个字符 |
 | `top_k` | integer | 可选，范围 1 到 20，默认 5 |
-| `use_rerank` | boolean | 可选，是否尝试本地语义重排 |
+| `top_n` | integer | 可选，范围 1 到 100，默认读取 `RERANK_TOP_N` |
+| `use_rerank` | boolean | 可选，是否调用 DashScope 语义重排 |
 
-结果中的 `vector_score`、`keyword_score`、`rerank_score` 可能为空；控制台只展示后端实际返回的分数字段。
+响应同时返回 `baseline_results`、`rerank_results`、`rerank_status`、`rerank_provider`、`rerank_model` 和耗时字段。每条重排结果包含 `baseline_rank`、`rerank_rank` 与 `rerank_score`。`vector_score`、`keyword_score` 等字段可能为空；控制台只展示后端实际返回的分数字段。
 
 依赖检查：
 

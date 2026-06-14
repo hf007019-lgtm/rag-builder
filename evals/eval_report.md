@@ -2,7 +2,7 @@
 
 ## 评测时间
 
-- 最近更新时间：2026-06-14T15:50:04+08:00
+- 最近更新时间：2026-06-14T17:04:08+08:00
 
 ## 检索评测
 
@@ -15,14 +15,17 @@
 - baseline precision@k：66.67%
 - baseline MRR：1.0000
 - missing_expected_count：2
-- average_latency_ms：455.31
-- rerank enabled：False
-- rerank status：disabled
-- rerank hit_rate@k：N/A
-- rerank MRR：N/A
-- delta hit_rate：N/A
-- delta MRR：N/A
-- 说明：语义重排未启用，本次仅评测 baseline 检索
+- average_latency_ms：492.50
+- rerank enabled：True
+- rerank status：enabled
+- rerank provider：dashscope
+- rerank model：qwen3-rerank
+- average_rerank_latency_ms：601.09
+- rerank hit_rate@k：100.00%
+- rerank MRR：1.0000
+- delta hit_rate：0.00%
+- delta MRR：0.0000
+- 说明：已使用 DashScope qwen3-rerank 完成语义重排。
 
 ## 答案引用评测
 
@@ -34,7 +37,7 @@
 - expected claim hit rate：93.33%
 - unsupported claim count：0
 - unanswerable abstention rate：100.00%
-- average_latency_ms：1300.09
+- average_latency_ms：1215.58
 - 说明：答案、引用与意图行为评测完成
 
 ## 失败用例
@@ -46,7 +49,6 @@
 ## 下一步改进
 
 - 示例 case 默认使用 expected_keywords 弱评测；有真实 ID 后优先填写 expected_chunk_ids。
-- 语义重排未启用，本次仅评测 baseline 检索
 - 优先评估标准 citations；旧版 sources 仍作为兼容字段支持。
 - answer_type、used_retrieval 和预期引用数量按用例可选字段校验。
 - expected claim 使用精确包含和字符二元组召回率进行轻量判断。

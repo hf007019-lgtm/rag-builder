@@ -279,7 +279,7 @@ python evals/run_answer_eval.py
 - `average_latency_ms`
 - `missing_expected_count`
 
-启用本地 rerank 对比：
+启用 DashScope rerank 对比：
 
 ```powershell
 python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 10
@@ -289,10 +289,15 @@ python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 10
 
 ```text
 RERANK_ENABLED=true
-RERANK_MODEL_NAME=BAAI/bge-reranker-base
+RERANK_PROVIDER=dashscope
+RERANK_MODEL_NAME=qwen3-rerank
+RERANK_TOP_N=30
+RERANK_TOP_K=5
+RERANK_TIMEOUT_SECONDS=20
+RERANK_APPLY_TO_ASK=false
 ```
 
-`sentence-transformers` 是可选依赖。评测只加载本机已缓存模型，不会自动下载；依赖缺失、模型未缓存或推理失败时会自动降级，报告仍正常生成。
+API Key 优先读取 `DASHSCOPE_API_KEY`，未配置时复用现有 `LLM_API_KEY`。调用超时、鉴权失败或响应异常时会自动降级为 baseline，报告仍正常生成且不会记录 API Key。默认不影响 `/api/v1/search/ask`。
 
 用例文件：
 

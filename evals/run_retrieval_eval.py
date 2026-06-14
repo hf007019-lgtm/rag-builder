@@ -25,14 +25,14 @@ def parse_args():
         help="评测用例 JSON 文件"
     )
     parser.add_argument("--top-k", type=int, default=3)
-    parser.add_argument("--top-n", type=int, default=10)
+    parser.add_argument("--top-n", type=int, default=30)
 
     rerank_group = parser.add_mutually_exclusive_group()
     rerank_group.add_argument(
         "--use-rerank",
         dest="use_rerank",
         action="store_true",
-        help="显式启用 rerank；仍只加载本地已缓存模型"
+        help="显式调用 DashScope qwen3-rerank"
     )
     rerank_group.add_argument(
         "--no-rerank",
@@ -61,9 +61,12 @@ def _empty_section(
         "rerank": empty_metrics,
         "rerank_enabled": False,
         "rerank_status": "not_run",
+        "rerank_provider": "dashscope",
+        "rerank_model": "qwen3-rerank",
         "delta_hit_rate": None,
         "delta_mrr": None,
         "average_latency_ms": None,
+        "average_rerank_latency_ms": None,
         "message": message,
         "failures": [],
         "notes": [
@@ -111,6 +114,9 @@ def run_evaluation(
     baseline_case_metrics = []
     rerank_case_metrics = []
     latencies = []
+    rerank_latencies = []
+    rerank_statuses = []
+    rerank_messages = []
     failures = []
     details = []
     error_count = 0
@@ -152,17 +158,22 @@ def run_evaluation(
         )
         baseline_case_metrics.append(baseline_metrics)
 
-        reranked_results = reranker.rerank(
+        rerank_result = reranker.rerank_chunks(
             query=case["query"],
-            candidates=baseline_pool,
+            chunks=baseline_pool,
             top_k=top_k,
             use_rerank=use_rerank
         )
+        rerank_statuses.append(rerank_result.status)
+        rerank_messages.append(rerank_result.message)
+        if rerank_result.latency_ms is not None:
+            rerank_latencies.append(rerank_result.latency_ms)
+
         rerank_metrics = None
-        if reranker.last_status == "enabled":
+        if rerank_result.status == "enabled":
             rerank_metrics = evaluate_ranking(
                 case,
-                reranked_results,
+                rerank_result.results,
                 top_k
             )
             rerank_case_metrics.append(rerank_metrics)
@@ -189,13 +200,24 @@ def run_evaluation(
             "query": case["query"],
             "baseline": baseline_metrics,
             "rerank": rerank_metrics,
-            "latency_ms": round(elapsed_ms, 2)
+            "retrieval_latency_ms": round(elapsed_ms, 2),
+            "rerank_latency_ms": rerank_result.latency_ms,
+            "rerank_status": rerank_result.status
         })
 
     baseline_summary = aggregate_ranking(baseline_case_metrics)
     rerank_summary = aggregate_ranking(rerank_case_metrics)
+    if "fallback" in rerank_statuses:
+        rerank_status = "fallback"
+    elif rerank_statuses and all(
+        status == "enabled" for status in rerank_statuses
+    ):
+        rerank_status = "enabled"
+    else:
+        rerank_status = "disabled"
+
     rerank_enabled = (
-        reranker.last_status == "enabled"
+        rerank_status == "enabled"
         and rerank_summary["evaluated_case_count"] > 0
     )
     delta_hit_rate = None
@@ -207,12 +229,24 @@ def run_evaluation(
             - baseline_summary["hit_rate_at_k"]
         )
         delta_mrr = rerank_summary["mrr"] - baseline_summary["mrr"]
+    else:
+        rerank_summary = aggregate_ranking([])
 
     notes = [
         "示例 case 默认使用 expected_keywords 弱评测；有真实 ID 后优先填写 expected_chunk_ids。"
     ]
     if not rerank_enabled:
-        notes.append(reranker.last_message)
+        notes.append(
+            "Rerank 未启用或调用失败，本次仅统计 baseline。"
+        )
+
+    message = (
+        "Rerank 调用失败，已回退到原始检索排序。"
+        if rerank_status == "fallback"
+        else rerank_messages[-1]
+        if rerank_messages
+        else reranker.last_message
+    )
 
     return {
         "status": "partial" if error_count else "completed",
@@ -223,13 +257,25 @@ def run_evaluation(
         "baseline": baseline_summary,
         "rerank": rerank_summary,
         "rerank_enabled": rerank_enabled,
-        "rerank_status": reranker.last_status,
+        "rerank_status": rerank_status,
+        "rerank_provider": reranker.provider,
+        "rerank_model": reranker.model_name,
+        "baseline_hit_rate_at_k": baseline_summary["hit_rate_at_k"],
+        "rerank_hit_rate_at_k": (
+            rerank_summary["hit_rate_at_k"] if rerank_enabled else None
+        ),
+        "baseline_mrr": baseline_summary["mrr"],
+        "rerank_mrr": rerank_summary["mrr"] if rerank_enabled else None,
         "delta_hit_rate": delta_hit_rate,
         "delta_mrr": delta_mrr,
         "average_latency_ms": (
             sum(latencies) / len(latencies) if latencies else None
         ),
-        "message": reranker.last_message,
+        "average_rerank_latency_ms": (
+            sum(rerank_latencies) / len(rerank_latencies)
+            if rerank_latencies else None
+        ),
+        "message": message,
         "failures": failures,
         "notes": notes,
         "details": details

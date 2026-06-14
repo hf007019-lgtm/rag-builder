@@ -4,7 +4,7 @@
     "case_count": 9,
     "knowledge_base_chunk_count": 13,
     "top_k": 3,
-    "top_n": 10,
+    "top_n": 30,
     "baseline": {
       "evaluated_case_count": 6,
       "hit_rate_at_k": 1.0,
@@ -14,23 +14,29 @@
       "missing_expected_count": 2
     },
     "rerank": {
-      "evaluated_case_count": 0,
-      "hit_rate_at_k": null,
-      "recall_at_k": null,
-      "precision_at_k": null,
-      "mrr": null,
-      "missing_expected_count": 0
+      "evaluated_case_count": 6,
+      "hit_rate_at_k": 1.0,
+      "recall_at_k": 0.875,
+      "precision_at_k": 0.7777777777777778,
+      "mrr": 1.0,
+      "missing_expected_count": 2
     },
-    "rerank_enabled": false,
-    "rerank_status": "disabled",
-    "delta_hit_rate": null,
-    "delta_mrr": null,
-    "average_latency_ms": 455.3052833334732,
-    "message": "语义重排未启用，本次仅评测 baseline 检索",
+    "rerank_enabled": true,
+    "rerank_status": "enabled",
+    "rerank_provider": "dashscope",
+    "rerank_model": "qwen3-rerank",
+    "baseline_hit_rate_at_k": 1.0,
+    "rerank_hit_rate_at_k": 1.0,
+    "baseline_mrr": 1.0,
+    "rerank_mrr": 1.0,
+    "delta_hit_rate": 0.0,
+    "delta_mrr": 0.0,
+    "average_latency_ms": 492.49853333276405,
+    "average_rerank_latency_ms": 601.0916666666667,
+    "message": "已使用 DashScope qwen3-rerank 完成语义重排。",
     "failures": [],
     "notes": [
-      "示例 case 默认使用 expected_keywords 弱评测；有真实 ID 后优先填写 expected_chunk_ids。",
-      "语义重排未启用，本次仅评测 baseline 检索"
+      "示例 case 默认使用 expected_keywords 弱评测；有真实 ID 后优先填写 expected_chunk_ids。"
     ],
     "details": [
       {
@@ -45,8 +51,18 @@
           "mrr": 1.0,
           "missing_expected_count": 0
         },
-        "rerank": null,
-        "latency_ms": 1809.97
+        "rerank": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 1.0,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "retrieval_latency_ms": 1919.83,
+        "rerank_latency_ms": 624.56,
+        "rerank_status": "enabled"
       },
       {
         "case_id": "case_002",
@@ -60,8 +76,18 @@
           "mrr": 1.0,
           "missing_expected_count": 0
         },
-        "rerank": null,
-        "latency_ms": 165.49
+        "rerank": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 1.0,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "retrieval_latency_ms": 222.07,
+        "rerank_latency_ms": 583.17,
+        "rerank_status": "enabled"
       },
       {
         "case_id": "case_003",
@@ -75,8 +101,18 @@
           "mrr": 1.0,
           "missing_expected_count": 0
         },
-        "rerank": null,
-        "latency_ms": 191.24
+        "rerank": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 1.0,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "retrieval_latency_ms": 198.12,
+        "rerank_latency_ms": 661.28,
+        "rerank_status": "enabled"
       },
       {
         "case_id": "case_004",
@@ -90,8 +126,18 @@
           "mrr": 1.0,
           "missing_expected_count": 0
         },
-        "rerank": null,
-        "latency_ms": 191.52
+        "rerank": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 1.0,
+          "precision": 0.6666666666666666,
+          "mrr": 1.0,
+          "missing_expected_count": 0
+        },
+        "retrieval_latency_ms": 220.45,
+        "rerank_latency_ms": 582.94,
+        "rerank_status": "enabled"
       },
       {
         "case_id": "case_005",
@@ -105,8 +151,18 @@
           "mrr": 1.0,
           "missing_expected_count": 1
         },
-        "rerank": null,
-        "latency_ms": 155.04
+        "rerank": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 0.5,
+          "precision": 0.3333333333333333,
+          "mrr": 1.0,
+          "missing_expected_count": 1
+        },
+        "retrieval_latency_ms": 182.71,
+        "rerank_latency_ms": 574.21,
+        "rerank_status": "enabled"
       },
       {
         "case_id": "case_006",
@@ -120,8 +176,18 @@
           "mrr": 1.0,
           "missing_expected_count": 1
         },
-        "rerank": null,
-        "latency_ms": 218.57
+        "rerank": {
+          "eligible": true,
+          "mode": "keyword",
+          "hit": 1.0,
+          "recall": 0.75,
+          "precision": 0.6666666666666666,
+          "mrr": 1.0,
+          "missing_expected_count": 1
+        },
+        "retrieval_latency_ms": 211.8,
+        "rerank_latency_ms": 580.39,
+        "rerank_status": "enabled"
       },
       {
         "case_id": "case_007",
@@ -140,7 +206,7 @@
       }
     ]
   },
-  "generated_at": "2026-06-14T15:50:04+08:00",
+  "generated_at": "2026-06-14T17:04:08+08:00",
   "answer": {
     "status": "completed",
     "case_count": 9,
@@ -152,7 +218,7 @@
     "expected_claim_hit_rate": 0.9333333333333333,
     "unsupported_claim_count": 0,
     "unanswerable_abstention_rate": 1.0,
-    "average_latency_ms": 1300.0934888888069,
+    "average_latency_ms": 1215.5753888885858,
     "message": "答案、引用与意图行为评测完成",
     "failures": [
       {
