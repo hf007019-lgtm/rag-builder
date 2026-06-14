@@ -9,6 +9,10 @@ import re
 from fastapi import HTTPException
 
 
+from app.core.config import settings
+from app.services.reranker_service import RerankerService
+
+
 # 从 DeepDocEngine 导入大模型和 Embedding 引擎
 # 作用：用于把用户问题转成向量，以及调用大模型生成最终答案
 from worker.deepdoc.core_engine import DeepDocEngine
@@ -360,7 +364,10 @@ def filter_relevant_chunks(retrieved_chunks: list) -> list:
 
     # 获取最高分
     # 作用：最高分通常代表当前问题最相关的 chunk
-    max_score = retrieved_chunks[0].get("score", 0)
+    max_score = max(
+        item.get("score", 0) or 0
+        for item in retrieved_chunks
+    )
 
     # 计算动态阈值
     # 作用：只保留不低于最高分一定比例的结果
@@ -471,10 +478,15 @@ def ask_question(question: str):
     # query_text 用于关键词检索
     # query_vector 用于向量检索
     # top_k 表示最多召回多少个候选 chunk
+    retrieval_top_k = (
+        min(max(1, settings.RERANK_TOP_N), 500)
+        if settings.RERANK_APPLY_TO_ASK
+        else RETRIEVAL_TOP_K
+    )
     retrieved_chunks = get_vector_store().hybrid_search(
         query_text=question,
         query_vector=query_vector,
-        top_k=RETRIEVAL_TOP_K
+        top_k=retrieval_top_k
     )
 
     # 如果完全没有检索到内容
@@ -494,6 +506,15 @@ def ask_question(question: str):
         retrieved_chunks=retrieved_chunks,
         target_suffix=target_suffix
     )
+
+    if settings.RERANK_APPLY_TO_ASK:
+        rerank_result = RerankerService().rerank_chunks(
+            query=question,
+            chunks=type_filtered_chunks,
+            top_k=settings.RERANK_TOP_K,
+            use_rerank=True
+        )
+        type_filtered_chunks = rerank_result.results
 
     # 再自动选择最高分文档
     # 作用：如果多个文件都被召回，只保留最相关文档里的 chunks

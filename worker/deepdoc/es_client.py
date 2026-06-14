@@ -215,7 +215,9 @@ class VectorStore:
                 "field": "vector",
                 "query_vector": query_vector,
                 "k": top_k,
-                "num_candidates": 10,
+                # Elasticsearch 要求 num_candidates 不小于 k。
+                # 小规模问答保持原值 10，rerank top_n 较大时只扩到必要下限。
+                "num_candidates": max(10, top_k),
                 "boost": 0.7
             },
 

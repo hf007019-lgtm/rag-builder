@@ -56,6 +56,18 @@ def get_optional_bool_env(key: str, default: bool = False) -> bool:
     return raw_value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def get_optional_int_env(key: str, default: int) -> int:
+    """读取可选整数配置，格式错误时尽早给出明确提示。"""
+    raw_value = os.getenv(key)
+    if raw_value is None:
+        return default
+
+    try:
+        return int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"环境变量 {key} 必须是整数") from exc
+
+
 # 定义项目配置类
 # 作用：统一管理数据库、MinIO、Redis、Elasticsearch、大模型等配置
 class Settings:
@@ -153,18 +165,66 @@ class Settings:
         "qwen-plus"
     )
 
-    # 是否默认启用语义重排
-    # 当前只供离线 eval 使用，不接入主问答链路
+    # 是否默认启用语义重排；检索调试接口可通过 use_rerank 显式覆盖
     RERANK_ENABLED: bool = get_optional_bool_env(
         "RERANK_ENABLED",
         False
     )
 
-    # 语义重排模型名称
-    # 仅尝试加载本机已缓存模型，不会在运行评测时自动下载
+    # DashScope rerank 使用独立 Key 时优先读取，否则复用现有模型服务 Key
+    DASHSCOPE_API_KEY: str = (
+        os.getenv("DASHSCOPE_API_KEY")
+        or LLM_API_KEY
+        or os.getenv("OPENAI_API_KEY", "")
+    )
+
+    RERANK_PROVIDER: str = get_optional_env(
+        "RERANK_PROVIDER",
+        "dashscope"
+    )
+
     RERANK_MODEL_NAME: str = get_optional_env(
         "RERANK_MODEL_NAME",
-        "BAAI/bge-reranker-base"
+        "qwen3-rerank"
+    )
+
+    RERANK_BASE_URL: str = get_optional_env(
+        "RERANK_BASE_URL",
+        "https://dashscope.aliyuncs.com/compatible-api/v1/reranks"
+    )
+
+    RERANK_TOP_N: int = get_optional_int_env(
+        "RERANK_TOP_N",
+        30
+    )
+
+    RERANK_TOP_K: int = get_optional_int_env(
+        "RERANK_TOP_K",
+        5
+    )
+
+    RERANK_TIMEOUT_SECONDS: int = get_optional_int_env(
+        "RERANK_TIMEOUT_SECONDS",
+        20
+    )
+
+    # 默认只用于检索调试和评测，避免未经验证就改变正式问答结果
+    RERANK_APPLY_TO_ASK: bool = get_optional_bool_env(
+        "RERANK_APPLY_TO_ASK",
+        False
+    )
+
+    RERANK_INSTRUCT: str = get_optional_env(
+        "RERANK_INSTRUCT",
+        (
+            "Given a user question, retrieve relevant passages from a "
+            "private knowledge base that answer the question."
+        )
+    )
+
+    RERANK_MAX_DOCUMENT_CHARS: int = get_optional_int_env(
+        "RERANK_MAX_DOCUMENT_CHARS",
+        4000
     )
 
 
