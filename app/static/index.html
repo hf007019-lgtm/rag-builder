@@ -203,7 +203,7 @@
                                         <div class="pipeline-connector"></div>
                                         <div class="pipeline-node configured"><b>06</b><span>Retrieve</span><small>Hybrid</small></div>
                                         <div class="pipeline-connector"></div>
-                                        <div class="pipeline-node disabled"><b>07</b><span>Rerank</span><small>未启用</small></div>
+                                        <div id="dashboardRerankNode" class="pipeline-node disabled"><b>07</b><span>Rerank</span><small id="dashboardRerankStatus">未启用</small></div>
                                         <div class="pipeline-connector"></div>
                                         <div class="pipeline-node configured"><b>08</b><span>Answer</span><small>已配置</small></div>
                                         <div class="pipeline-connector"></div>
@@ -441,14 +441,14 @@
                                         <span>Rerank</span>
                                         <select id="retrievalRerankInput">
                                             <option value="false">未启用</option>
-                                            <option value="true">尝试启用</option>
+                                            <option value="true">启用 DashScope</option>
                                         </select>
                                     </label>
                                     <button id="runRetrievalButton" class="accent-button retrieval-run-button" type="button">
                                         <svg class="icon"><use href="#icon-search"></use></svg><span>运行检索</span>
                                     </button>
                                 </div>
-                                <div class="retrieval-hint">独立检索调试不会调用 Chat 模型；rerank 只尝试本机已有模型。</div>
+                                <div class="retrieval-hint">独立检索调试不会调用 Chat 模型；启用后会对 baseline top_n 调用 DashScope qwen3-rerank。</div>
                             </section>
 
                             <section class="content-card retrieval-results-card">

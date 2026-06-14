@@ -57,6 +57,8 @@ const elements = {
     dashboardEvalRate: $("dashboardEvalRate"),
     dashboardEvalSource: $("dashboardEvalSource"),
     dashboardRecentDocuments: $("dashboardRecentDocuments"),
+    dashboardRerankNode: $("dashboardRerankNode"),
+    dashboardRerankStatus: $("dashboardRerankStatus"),
     dashboardSuccessCount: $("dashboardSuccessCount"),
     documentDetailContent: $("documentDetailContent"),
     documentResultCount: $("documentResultCount"),
@@ -981,11 +983,39 @@ async function runRetrievalTest() {
 }
 
 function renderRetrievalResults(data) {
-    const results = normalizeArray(data?.results);
+    const baselineResults = normalizeArray(data?.baseline_results);
+    const rerankResults = normalizeArray(data?.rerank_results);
+    const results = data?.rerank_requested
+        ? (rerankResults.length ? rerankResults : baselineResults)
+        : (baselineResults.length ? baselineResults : normalizeArray(data?.results));
+    const rerankStatus = String(data?.rerank_status || "disabled").toLowerCase();
+    const rerankModel = data?.rerank_model || "qwen3-rerank";
+    const rerankLabel = rerankStatus === "enabled"
+        ? `DashScope ${rerankModel} · 已启用`
+        : getRerankStatusText(rerankStatus);
     elements.retrievalLatency.textContent = `${formatNumber(data?.latency_ms, 2)} ms`;
-    elements.retrievalRerankStatus.textContent = getRerankStatusText(data?.rerank_status);
-    elements.retrievalRerankStatus.title = data?.rerank_message || "";
+    if (isMeaningful(data?.rerank_latency_ms)) {
+        elements.retrievalLatency.title = `Rerank ${formatNumber(data.rerank_latency_ms, 2)} ms`;
+    } else {
+        elements.retrievalLatency.removeAttribute("title");
+    }
+    elements.retrievalRerankStatus.textContent = rerankLabel;
+    elements.retrievalRerankStatus.title = [
+        data?.rerank_message,
+        data?.rerank_error
+    ].filter(isMeaningful).join(" ");
     elements.retrievalResults.innerHTML = "";
+    setDashboardRerankState(rerankStatus, rerankModel);
+
+    if (rerankStatus === "fallback") {
+        const notice = createTextElement(
+            "div",
+            "retrieval-status-note warning",
+            "Rerank 调用失败，已回退到原始检索排序。"
+        );
+        notice.setAttribute("role", "status");
+        elements.retrievalResults.appendChild(notice);
+    }
 
     if (results.length === 0) {
         elements.retrievalResults.appendChild(
@@ -1002,10 +1032,25 @@ function renderRetrievalResults(data) {
         const title = document.createElement("div");
         title.className = "retrieval-result-title";
         const resultSource = normalizeSource(item);
-        title.append(
-            createTextElement("span", "retrieval-rank", `#${item.rank || index + 1}`),
-            createTextElement("strong", "", resultSource.fileName)
+        const rankGroup = document.createElement("span");
+        rankGroup.className = "retrieval-rank-group";
+        rankGroup.appendChild(
+            createTextElement(
+                "span",
+                "retrieval-rank",
+                `Baseline Rank ${item.baseline_rank || item.rank || index + 1}`
+            )
         );
+        if (isMeaningful(item.rerank_rank)) {
+            rankGroup.appendChild(
+                createTextElement(
+                    "span",
+                    "retrieval-rank rerank",
+                    `Rerank Rank ${item.rerank_rank}`
+                )
+            );
+        }
+        title.append(rankGroup, createTextElement("strong", "", resultSource.fileName));
         summary.append(
             title,
             createTextElement(
@@ -1296,10 +1341,39 @@ function renderRetrievalConfiguration(config) {
     elements.playgroundTopK.textContent = isMeaningful(config.top_k)
         ? String(config.top_k)
         : "5";
-    elements.playgroundRerank.textContent = config.rerank_enabled ? "已启用" : "未启用";
+    const rerankModel = config.rerank_model || "qwen3-rerank";
+    elements.playgroundRerank.textContent = config.rerank_apply_to_ask
+        ? `DashScope ${rerankModel}`
+        : config.rerank_enabled
+        ? `${rerankModel}（问答未启用）`
+        : "未启用";
+    const runtimeStatus = String(config.rerank_runtime_status || "").toLowerCase();
+    setDashboardRerankState(
+        ["enabled", "fallback"].includes(runtimeStatus)
+            ? runtimeStatus
+            : config.rerank_enabled
+            ? "enabled"
+            : "disabled",
+        rerankModel
+    );
     elements.playgroundThreshold.textContent = isMeaningful(config.citation_threshold)
         ? Number(config.citation_threshold).toFixed(2)
         : "0.60";
+}
+
+function setDashboardRerankState(status, model) {
+    const value = String(status || "disabled").toLowerCase();
+    elements.dashboardRerankNode.classList.remove("configured", "disabled", "fallback");
+    if (value === "enabled") {
+        elements.dashboardRerankNode.classList.add("configured");
+        elements.dashboardRerankStatus.textContent = `DashScope ${model}`;
+    } else if (value === "fallback") {
+        elements.dashboardRerankNode.classList.add("fallback");
+        elements.dashboardRerankStatus.textContent = "调用失败，已回退";
+    } else {
+        elements.dashboardRerankNode.classList.add("disabled");
+        elements.dashboardRerankStatus.textContent = "未启用";
+    }
 }
 
 function toggleContextPanel() {
@@ -1706,6 +1780,7 @@ function getRerankStatusText(status) {
     const value = String(status || "").toLowerCase();
     if (value === "enabled") return "已启用";
     if (value === "disabled") return "未启用";
+    if (value === "fallback") return "调用失败，已回退";
     if (value === "unavailable") return "不可用";
     if (value === "failed") return "执行失败";
     return isMeaningful(status) ? String(status) : "-";
