@@ -1,989 +1,1823 @@
 const API_BASE = "/api/v1";
 
-let latestDocuments = [];
-let lastSelectedDocId = null;
-let recentQuestionItems = [];
-let fileSelectionOrigin = "panel";
-let lastSourceContainer = null;
+const VIEW_META = {
+    dashboard: { eyebrow: "Workspace overview", title: "总览" },
+    playground: { eyebrow: "Knowledge playground", title: "知识库问答" },
+    documents: { eyebrow: "Knowledge assets", title: "文档管理" },
+    pipeline: { eyebrow: "Processing observability", title: "解析流水线" },
+    retrieval: { eyebrow: "Retrieval inspection", title: "检索调试" },
+    evaluation: { eyebrow: "RAG quality evaluation", title: "评测报告" },
+    health: { eyebrow: "Runtime dependencies", title: "系统状态" }
+};
 
-const healthGrid = document.getElementById("healthGrid");
-const overallHealth = document.getElementById("overallHealth");
-const recentQuestions = document.getElementById("recentQuestions");
-const recentDocuments = document.getElementById("recentDocuments");
-const fileInput = document.getElementById("fileInput");
-const selectedFileName = document.getElementById("selectedFileName");
-const uploadButton = document.getElementById("uploadButton");
-const uploadResult = document.getElementById("uploadResult");
-const documentsList = document.getElementById("documentsList");
-const logDocumentList = document.getElementById("logDocumentList");
-const refreshDocumentsButton = document.getElementById("refreshDocumentsButton");
-const refreshHealthButton = document.getElementById("refreshHealthButton");
-const questionInput = document.getElementById("questionInput");
-const askButton = document.getElementById("askButton");
-const attachmentButton = document.getElementById("attachmentButton");
-const chooseFileButton = document.getElementById("chooseFileButton");
-const composerHint = document.getElementById("composerHint");
-const chatScroll = document.getElementById("chatScroll");
-const chatMessages = document.getElementById("chatMessages");
-const emptyState = document.getElementById("emptyState");
-const taskLogTitle = document.getElementById("taskLogTitle");
-const taskLogContent = document.getElementById("taskLogContent");
-const toastRegion = document.getElementById("toastRegion");
-const newChatButton = document.getElementById("newChatButton");
-const sidebarBackdrop = document.getElementById("sidebarBackdrop");
-
-const HEALTH_SERVICES = [
-    { key: "postgresql", label: "PostgreSQL" },
-    { key: "minio", label: "MinIO" },
-    { key: "redis", label: "Redis" },
-    { key: "elasticsearch", label: "Elasticsearch" }
+const HEALTH_ORDER = [
+    "fastapi",
+    "postgresql",
+    "minio",
+    "redis",
+    "elasticsearch",
+    "celery",
+    "embedding",
+    "llm",
+    "rerank"
 ];
 
-// 初始化页面事件，并预加载文档列表和依赖服务状态。
+const SIDEBAR_HEALTH_ORDER = [
+    "fastapi",
+    "elasticsearch",
+    "postgresql",
+    "minio",
+    "redis"
+];
+
+let latestDocuments = [];
+let latestEvaluation = null;
+let latestSystemStatus = null;
+let selectedDocumentId = null;
+let fileSelectionOrigin = "documents";
+let answerSequence = 0;
+let selectedAnswerId = null;
+const answerEvidenceById = new Map();
+
+const $ = (id) => document.getElementById(id);
+
+const elements = {
+    askButton: $("askButton"),
+    attachmentButton: $("attachmentButton"),
+    chatMessages: $("chatMessages"),
+    chatScroll: $("chatScroll"),
+    chooseFileButton: $("chooseFileButton"),
+    composerHint: $("composerHint"),
+    contextBackdrop: $("contextBackdrop"),
+    dashboardAskButton: $("dashboardAskButton"),
+    dashboardChunkCount: $("dashboardChunkCount"),
+    dashboardDocumentCount: $("dashboardDocumentCount"),
+    dashboardEvalFallback: $("dashboardEvalFallback"),
+    dashboardEvalMetrics: $("dashboardEvalMetrics"),
+    dashboardEvalRate: $("dashboardEvalRate"),
+    dashboardEvalSource: $("dashboardEvalSource"),
+    dashboardRecentDocuments: $("dashboardRecentDocuments"),
+    dashboardSuccessCount: $("dashboardSuccessCount"),
+    documentDetailContent: $("documentDetailContent"),
+    documentResultCount: $("documentResultCount"),
+    documentSearchInput: $("documentSearchInput"),
+    documentStatusFilter: $("documentStatusFilter"),
+    documentsList: $("documentsList"),
+    emptyState: $("emptyState"),
+    evaluationFailureCount: $("evaluationFailureCount"),
+    evaluationFailureList: $("evaluationFailureList"),
+    evaluationGeneratedAt: $("evaluationGeneratedAt"),
+    evaluationMessage: $("evaluationMessage"),
+    evidenceCloseButton: $("evidenceCloseButton"),
+    evidenceContent: $("evidenceContent"),
+    evidenceCount: $("evidenceCount"),
+    evidenceStatus: $("evidenceStatus"),
+    evidenceToggle: $("evidenceToggle"),
+    fileInput: $("fileInput"),
+    globalEyebrow: $("globalEyebrow"),
+    globalStatusButton: $("globalStatusButton"),
+    globalStatusDot: $("globalStatusDot"),
+    globalStatusText: $("globalStatusText"),
+    globalViewTitle: $("globalViewTitle"),
+    headerEvidenceCount: $("headerEvidenceCount"),
+    healthGrid: $("healthGrid"),
+    mobileMenuButton: $("mobileMenuButton"),
+    overallHealth: $("overallHealth"),
+    pipelineTaskCount: $("pipelineTaskCount"),
+    pipelineTaskList: $("pipelineTaskList"),
+    playgroundMode: $("playgroundMode"),
+    playgroundRerank: $("playgroundRerank"),
+    playgroundThreshold: $("playgroundThreshold"),
+    playgroundTopK: $("playgroundTopK"),
+    questionInput: $("questionInput"),
+    refreshDocumentsButton: $("refreshDocumentsButton"),
+    refreshEvaluationButton: $("refreshEvaluationButton"),
+    refreshHealthButton: $("refreshHealthButton"),
+    refreshPipelineButton: $("refreshPipelineButton"),
+    retrievalLatency: $("retrievalLatency"),
+    retrievalQueryInput: $("retrievalQueryInput"),
+    retrievalRerankInput: $("retrievalRerankInput"),
+    retrievalRerankStatus: $("retrievalRerankStatus"),
+    retrievalResults: $("retrievalResults"),
+    retrievalTopKInput: $("retrievalTopKInput"),
+    runRetrievalButton: $("runRetrievalButton"),
+    selectedFileName: $("selectedFileName"),
+    sidebarBackdrop: $("sidebarBackdrop"),
+    sidebarHealthList: $("sidebarHealthList"),
+    sidebarOverallDot: $("sidebarOverallDot"),
+    sidebarOverallText: $("sidebarOverallText"),
+    sidebarRefreshStatus: $("sidebarRefreshStatus"),
+    sidebarUploadButton: $("sidebarUploadButton"),
+    toastRegion: $("toastRegion"),
+    uploadButton: $("uploadButton"),
+    uploadResult: $("uploadResult")
+};
+
 document.addEventListener("DOMContentLoaded", () => {
     bindNavigation();
     bindActions();
-    renderRecentQuestions();
-    loadDocuments();
-    checkHealth();
+    setView("dashboard");
     resizeQuestionInput();
+
+    Promise.allSettled([
+        loadDocuments(),
+        loadEvaluation(),
+        loadSystemStatus()
+    ]);
 });
 
-// 检查 PostgreSQL、MinIO、Redis、Elasticsearch 等依赖服务状态。
-async function checkHealth() {
-    renderHealthStatus({ status: "checking", dependencies: {} });
-
-    try {
-        const response = await fetch(`${API_BASE}/health/dependencies`);
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
-        }
-
-        const data = await response.json();
-        renderHealthStatus(data);
-    } catch (error) {
-        renderHealthStatus({ status: "error", dependencies: {} });
-        showError(`服务状态检查失败：${getErrorText(error)}`);
-    }
-}
-
-// 加载文档列表，并同步更新文档管理、日志选择器和侧栏最近文档。
-async function loadDocuments() {
-    documentsList.innerHTML = "";
-    documentsList.appendChild(createEmptyState("正在加载文档列表..."));
-
-    try {
-        const response = await fetch(`${API_BASE}/documents/`);
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
-        }
-
-        const data = await response.json();
-        latestDocuments = normalizeArray(data).map(normalizeDocument);
-        renderDocuments(latestDocuments);
-        renderRecentDocuments(latestDocuments);
-        renderLogDocumentList(latestDocuments);
-    } catch (error) {
-        latestDocuments = [];
-        renderDocuments([]);
-        renderRecentDocuments([]);
-        renderLogDocumentList([]);
-        showError(`文档列表加载失败：${getErrorText(error)}`);
-    }
-}
-
-// 上传用户选择的文档文件，成功后自动刷新文档列表。
-async function uploadDocument() {
-    const file = fileInput.files && fileInput.files[0];
-
-    if (!file) {
-        showError("请先选择一个要上传的文档。");
-        return;
-    }
-
-    const formData = new FormData();
-    formData.append("file", file);
-    uploadButton.disabled = true;
-    attachmentButton.disabled = true;
-    uploadButton.textContent = "上传中...";
-    composerHint.textContent = `正在上传 ${file.name}...`;
-    uploadResult.textContent = "正在上传文档，请稍候...";
-
-    try {
-        const response = await fetch(`${API_BASE}/documents/upload`, {
-            method: "POST",
-            body: formData
-        });
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
-        }
-
-        const data = await response.json();
-        const docId = data.doc_id ?? data.id ?? data.document_id ?? "-";
-        const fileName = data.file_name ?? data.filename ?? file.name;
-        const status = data.status ?? "PENDING";
-        const message = data.message ?? data.msg ?? "上传成功，已加入解析队列。";
-
-        renderKeyValues(uploadResult, [
-            ["doc_id", docId],
-            ["file_name", fileName],
-            ["status", status],
-            ["message", message]
-        ]);
-
-        composerHint.textContent = `${fileName} 已加入解析队列`;
-        showNotice("文档上传成功，正在刷新文档列表。");
-        await loadDocuments();
-        fileInput.value = "";
-        selectedFileName.textContent = "选择本地文件后开始上传";
-    } catch (error) {
-        uploadResult.textContent = "文档上传失败。";
-        composerHint.textContent = "文档上传失败，请稍后重试";
-        showError(`文档上传失败：${getErrorText(error)}`);
-    } finally {
-        uploadButton.disabled = false;
-        attachmentButton.disabled = false;
-        uploadButton.textContent = "上传文档";
-    }
-}
-
-// 根据输入框中的问题发起 RAG 问答，并将结果追加到聊天消息流。
-async function askQuestion() {
-    if (askButton.disabled) {
-        return;
-    }
-
-    const question = questionInput.value.trim();
-
-    if (!question) {
-        showError("请输入要检索的问题。");
-        questionInput.focus();
-        return;
-    }
-
-    setView("chat");
-    emptyState.classList.add("hidden");
-    appendUserMessage(question);
-    addRecentQuestion(question);
-
-    const assistantMessage = createAssistantMessage();
-    lastSourceContainer = assistantMessage.sourceList;
-    questionInput.value = "";
-    resizeQuestionInput();
-    askButton.disabled = true;
-    askButton.textContent = "…";
-    composerHint.textContent = "正在检索知识库并生成回答...";
-    scrollChatToBottom();
-
-    try {
-        const response = await fetch(`${API_BASE}/search/ask`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json"
-            },
-            body: JSON.stringify({ question })
-        });
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
-        }
-
-        const data = await response.json();
-        const answer = data.answer ?? data.result ?? "后端没有返回 answer 字段。";
-        const sources = normalizeArray(data.sources);
-
-        assistantMessage.answer.classList.remove("loading");
-        renderLimitedMarkdown(answer, assistantMessage.answer);
-        renderSources(sources, assistantMessage.sourceList);
-        composerHint.textContent = `回答完成 · 引用来源 ${sources.length}`;
-    } catch (error) {
-        assistantMessage.answer.classList.remove("loading");
-        assistantMessage.answer.classList.add("error");
-        assistantMessage.answer.textContent = "问答请求失败，请检查文档是否已解析成功，或后端依赖服务是否正常。";
-        renderSources([], assistantMessage.sourceList);
-        composerHint.textContent = "检索失败，请检查服务状态";
-        showError(`问答请求失败：${getErrorText(error)}`);
-    } finally {
-        askButton.disabled = false;
-        askButton.textContent = "↑";
-        scrollChatToBottom();
-    }
-}
-
-// 刷新单个文档的解析状态，并重新加载完整文档列表。
-async function refreshDocumentStatus(docId) {
-    if (!docId) {
-        showError("缺少 doc_id，无法刷新状态。");
-        return;
-    }
-
-    try {
-        const response = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/status`);
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
-        }
-
-        const data = await response.json();
-        const documentItem = normalizeDocument(data);
-        showNotice(`文档 ${documentItem.doc_id} 当前状态：${documentItem.status}`);
-        await loadDocuments();
-    } catch (error) {
-        showError(`文档状态刷新失败：${getErrorText(error)}`);
-    }
-}
-
-// 加载指定文档的解析任务日志，并切换到解析日志面板展示。
-async function loadTaskLog(docId) {
-    if (!docId) {
-        showError("缺少 doc_id，无法查看任务日志。");
-        return;
-    }
-
-    lastSelectedDocId = docId;
-    setView("logs");
-    taskLogTitle.textContent = `解析日志 · doc_id=${docId}`;
-    taskLogContent.innerHTML = "";
-    taskLogContent.appendChild(createEmptyState("正在加载任务日志..."));
-    renderLogDocumentList(latestDocuments);
-
-    try {
-        const response = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/task-log`);
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
-        }
-
-        const logs = normalizeArray(await response.json());
-        renderTaskLogs(logs);
-    } catch (error) {
-        taskLogContent.innerHTML = "";
-        taskLogContent.appendChild(createEmptyState("任务日志获取失败"));
-        showError(`任务日志获取失败：${getErrorText(error)}`);
-    }
-}
-
-// 渲染问答返回的 sources 来源片段列表。
-function renderSources(sources, targetContainer = lastSourceContainer) {
-    if (!targetContainer) {
-        return;
-    }
-
-    const sourceItems = normalizeArray(sources);
-    const section = targetContainer.closest(".sources-section");
-    const heading = section ? section.querySelector(".sources-heading") : null;
-    targetContainer.innerHTML = "";
-
-    if (section) {
-        section.hidden = false;
-    }
-
-    if (heading) {
-        heading.textContent = `引用来源 ${sourceItems.length}`;
-    }
-
-    if (sourceItems.length === 0) {
-        targetContainer.appendChild(createEmptyState("当前没有检索到来源"));
-        return;
-    }
-
-    sourceItems.forEach((source, index) => {
-        const details = document.createElement("details");
-        details.className = "source-item";
-        details.open = index === 0;
-
-        const summary = document.createElement("summary");
-        const fileName = source.file_name ?? source.filename ?? "未命名来源";
-        const chunkId = source.chunk_id ?? source.chunkId ?? index + 1;
-        const pageNumber = source.page_number ?? source.pageNumber;
-        const summaryMeta = pageNumber !== undefined && pageNumber !== null
-            ? `chunk ${chunkId} · 第 ${pageNumber} 页`
-            : `chunk ${chunkId}`;
-
-        summary.append(
-            createTextElement("span", "source-title", fileName),
-            createTextElement("span", "source-index", summaryMeta)
-        );
-
-        const body = document.createElement("div");
-        body.className = "source-body";
-
-        const meta = document.createElement("div");
-        meta.className = "source-meta";
-        appendMeta(meta, `doc_id=${source.doc_id ?? source.id ?? "-"}`);
-        appendMeta(meta, `chunk_id=${chunkId}`);
-
-        if (pageNumber !== undefined && pageNumber !== null) {
-            appendMeta(meta, `page=${pageNumber}`);
-        }
-
-        const chunkText = String(source.chunk_text ?? source.text ?? source.content ?? "");
-        const preview = chunkText.length > 500 ? `${chunkText.slice(0, 500)}...` : chunkText;
-        body.append(meta, createTextElement("div", "source-text", preview || "该来源没有返回 chunk_text。"));
-        details.append(summary, body);
-        targetContainer.appendChild(details);
-    });
-}
-
-// 渲染文档管理列表，并提供状态刷新、重试解析、查看日志和删除操作。
-function renderDocuments(documents) {
-    const documentItems = normalizeArray(documents).map(normalizeDocument);
-    documentsList.innerHTML = "";
-
-    if (documentItems.length === 0) {
-        documentsList.appendChild(createEmptyState("暂无文档"));
-        return;
-    }
-
-    documentItems.forEach((doc) => {
-        const item = document.createElement("article");
-        item.className = "document-item";
-
-        const main = document.createElement("div");
-        main.className = "document-main";
-
-        const info = document.createElement("div");
-        const meta = document.createElement("div");
-        meta.className = "document-meta";
-        appendMeta(meta, `doc_id=${doc.doc_id}`);
-
-        if (doc.created_at) {
-            appendMeta(meta, `created_at=${formatDate(doc.created_at)}`);
-        }
-
-        if (doc.updated_at) {
-            appendMeta(meta, `updated_at=${formatDate(doc.updated_at)}`);
-        }
-
-        info.append(createTextElement("div", "document-title", doc.file_name), meta);
-        main.append(info, createTextElement("span", `status-badge ${getDocumentStatusClass(doc.status)}`, doc.status));
-
-        const actions = document.createElement("div");
-        actions.className = "document-actions";
-        const refreshButton = createButton("刷新状态", "small-button", () => refreshDocumentStatus(doc.doc_id));
-        const retryButton = createButton("重试解析", "small-button", () => retryDocument(doc.doc_id));
-        const logButton = createButton("查看日志", "small-button", () => loadTaskLog(doc.doc_id));
-        const deleteButton = createButton("删除", "small-button danger-button", () => deleteDocument(doc.doc_id, doc.file_name));
-
-        retryButton.disabled = doc.status !== "FAILED";
-        retryButton.title = doc.status === "FAILED" ? "重新派发解析任务" : "仅失败文档可以重试";
-        actions.append(refreshButton, retryButton, logButton, deleteButton);
-        item.append(main, actions);
-        documentsList.appendChild(item);
-    });
-}
-
-// 渲染依赖服务健康状态，兼容对象、数组以及字段缺失的返回格式。
-function renderHealthStatus(data) {
-    const dependencies = data?.dependencies ?? {};
-    const overall = String(data?.status ?? "checking").toLowerCase();
-
-    healthGrid.innerHTML = "";
-    overallHealth.className = `status-badge ${getHealthStatusClass(overall)}`;
-    overallHealth.textContent = getOverallHealthText(overall);
-
-    HEALTH_SERVICES.forEach((service) => {
-        const itemData = findDependency(dependencies, service);
-        const status = String(itemData?.status ?? overall).toLowerCase();
-        const row = document.createElement("div");
-        row.className = "health-item";
-        row.title = itemData?.message ?? "";
-        row.append(
-            createTextElement("div", "health-name", service.label),
-            createTextElement("span", `status-badge ${getHealthStatusClass(status)}`, getDependencyStatusText(status))
-        );
-        healthGrid.appendChild(row);
-    });
-}
-
-// 显示中文错误提示，不中断页面其他交互。
-function showError(message) {
-    showToast(message, "error");
-}
-
-// 显示中文操作提示，用于反馈上传、刷新和检索成功。
-function showNotice(message) {
-    showToast(message, "notice");
-}
-
-// 绑定侧栏导航、返回问答和移动端导航抽屉事件。
 function bindNavigation() {
-    document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
-        item.addEventListener("click", () => setView(item.dataset.view));
+    document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
+        button.addEventListener("click", () => setView(button.dataset.view));
     });
 
-    document.querySelectorAll(".return-chat-button").forEach((button) => {
-        button.addEventListener("click", () => setView("chat"));
+    document.querySelectorAll("[data-view-target]").forEach((button) => {
+        button.addEventListener("click", () => setView(button.dataset.viewTarget));
     });
 
-    document.querySelectorAll(".mobile-menu-button").forEach((button) => {
-        button.addEventListener("click", () => document.body.classList.add("sidebar-open"));
+    elements.mobileMenuButton.addEventListener("click", () => {
+        document.body.classList.add("sidebar-open");
     });
+    elements.sidebarBackdrop.addEventListener("click", closeSidebar);
+    elements.contextBackdrop.addEventListener("click", closeContextPanel);
+    elements.evidenceCloseButton.addEventListener("click", closeContextPanel);
+    elements.evidenceToggle.addEventListener("click", toggleContextPanel);
+    elements.globalStatusButton.addEventListener("click", () => setView("health"));
 
-    sidebarBackdrop.addEventListener("click", closeSidebar);
-    newChatButton.addEventListener("click", newChat);
-}
-
-// 绑定聊天输入、文件上传和面板操作事件。
-function bindActions() {
-    askButton.addEventListener("click", askQuestion);
-    uploadButton.addEventListener("click", uploadDocument);
-    refreshDocumentsButton.addEventListener("click", loadDocuments);
-    refreshHealthButton.addEventListener("click", checkHealth);
-
-    attachmentButton.addEventListener("click", () => {
-        fileSelectionOrigin = "composer";
-        fileInput.value = "";
-        fileInput.click();
-    });
-
-    chooseFileButton.addEventListener("click", () => {
-        fileSelectionOrigin = "panel";
-        fileInput.value = "";
-        fileInput.click();
-    });
-
-    fileInput.addEventListener("change", () => {
-        const file = fileInput.files && fileInput.files[0];
-        selectedFileName.textContent = file ? file.name : "选择本地文件后开始上传";
-
-        if (file && fileSelectionOrigin === "composer") {
-            uploadDocument();
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+            closeSidebar();
+            closeContextPanel();
         }
     });
+}
 
-    questionInput.addEventListener("input", resizeQuestionInput);
-    questionInput.addEventListener("keydown", (event) => {
+function bindActions() {
+    elements.dashboardAskButton.addEventListener("click", () => {
+        setView("playground");
+        window.setTimeout(() => elements.questionInput.focus(), 0);
+    });
+
+    const openDocumentUpload = () => {
+        setView("documents");
+        window.setTimeout(() => {
+            fileSelectionOrigin = "documents";
+            elements.fileInput.value = "";
+            elements.fileInput.click();
+        }, 0);
+    };
+    elements.sidebarUploadButton.addEventListener("click", openDocumentUpload);
+    $("dashboardUploadButton").addEventListener("click", openDocumentUpload);
+
+    elements.askButton.addEventListener("click", askQuestion);
+    elements.questionInput.addEventListener("input", resizeQuestionInput);
+    elements.questionInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
             event.preventDefault();
             askQuestion();
         }
     });
+
+    document.querySelectorAll("[data-question]").forEach((button) => {
+        button.addEventListener("click", () => {
+            elements.questionInput.value = button.dataset.question;
+            resizeQuestionInput();
+            askQuestion();
+        });
+    });
+
+    elements.attachmentButton.addEventListener("click", () => {
+        fileSelectionOrigin = "playground";
+        elements.fileInput.value = "";
+        elements.fileInput.click();
+    });
+    elements.chooseFileButton.addEventListener("click", () => {
+        fileSelectionOrigin = "documents";
+        elements.fileInput.value = "";
+        elements.fileInput.click();
+    });
+    elements.fileInput.addEventListener("change", handleFileSelection);
+    elements.uploadButton.addEventListener("click", uploadDocument);
+
+    elements.refreshDocumentsButton.addEventListener("click", loadDocuments);
+    elements.documentSearchInput.addEventListener("input", renderDocuments);
+    elements.documentStatusFilter.addEventListener("change", renderDocuments);
+    elements.refreshPipelineButton.addEventListener("click", loadRecentTaskLogs);
+    elements.runRetrievalButton.addEventListener("click", runRetrievalTest);
+    elements.retrievalQueryInput.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+            event.preventDefault();
+            runRetrievalTest();
+        }
+    });
+    elements.refreshEvaluationButton.addEventListener("click", loadEvaluation);
+    elements.refreshHealthButton.addEventListener("click", loadSystemStatus);
+    elements.sidebarRefreshStatus.addEventListener("click", loadSystemStatus);
 }
 
-// 切换聊天、文档、日志和系统状态工作视图。
 function setView(viewName) {
+    const meta = VIEW_META[viewName] || VIEW_META.dashboard;
+
     document.querySelectorAll(".app-view").forEach((view) => {
         view.classList.toggle("active", view.dataset.viewName === viewName);
     });
-
-    document.querySelectorAll(".nav-item[data-view]").forEach((item) => {
-        item.classList.toggle("active", item.dataset.view === viewName);
+    document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
+        const active = button.dataset.view === viewName;
+        button.classList.toggle("active", active);
+        if (active) {
+            button.setAttribute("aria-current", "page");
+        } else {
+            button.removeAttribute("aria-current");
+        }
     });
 
+    elements.globalEyebrow.textContent = meta.eyebrow;
+    elements.globalViewTitle.textContent = meta.title;
     closeSidebar();
 
-    if (viewName === "documents") {
+    if (viewName !== "playground") {
+        closeContextPanel();
+    }
+
+    if (viewName === "documents" && latestDocuments.length === 0) {
         loadDocuments();
-    } else if (viewName === "logs") {
-        renderLogDocumentList(latestDocuments);
-    } else if (viewName === "health") {
-        checkHealth();
-    } else if (viewName === "chat") {
-        window.setTimeout(() => questionInput.focus(), 0);
+    } else if (viewName === "pipeline") {
+        loadRecentTaskLogs();
+    } else if (viewName === "evaluation" && latestEvaluation === null) {
+        loadEvaluation();
+    } else if (viewName === "health" && latestSystemStatus === null) {
+        loadSystemStatus();
+    } else if (viewName === "playground") {
+        window.setTimeout(() => elements.questionInput.focus(), 0);
     }
 }
 
-// 新建一个空白问答会话，并保留侧栏中的最近问题记录。
-function newChat() {
-    chatMessages.innerHTML = "";
-    emptyState.classList.remove("hidden");
-    questionInput.value = "";
-    composerHint.textContent = "RAG Builder 会基于已解析文档回答";
-    resizeQuestionInput();
-    setView("chat");
+async function fetchJson(url, options) {
+    const response = await fetch(url, options);
+
+    if (!response.ok) {
+        throw new Error(await readResponseError(response));
+    }
+
+    return response.json();
 }
 
-// 将用户问题追加到聊天消息流。
-function appendUserMessage(question) {
-    const message = document.createElement("article");
-    message.className = "message message-user";
-    message.appendChild(createTextElement("div", "user-bubble", question));
-    chatMessages.appendChild(message);
+async function loadDocuments() {
+    elements.refreshDocumentsButton.disabled = true;
+    elements.documentsList.replaceChildren(
+        createEmptyPanel("正在加载文档列表...")
+    );
+
+    try {
+        const data = await fetchJson(`${API_BASE}/documents/`);
+        latestDocuments = normalizeArray(data)
+            .map(normalizeDocument)
+            .sort((left, right) => dateValue(right.createdAt) - dateValue(left.createdAt));
+        renderDocuments();
+        renderDashboardDocuments();
+        return latestDocuments;
+    } catch (error) {
+        latestDocuments = [];
+        renderDocuments();
+        renderDashboardDocuments();
+        showError(`文档列表加载失败：${getFriendlyError(error)}`);
+        return [];
+    } finally {
+        elements.refreshDocumentsButton.disabled = false;
+    }
 }
 
-// 创建一个等待后端回答的系统消息，并返回可更新的节点。
-function createAssistantMessage() {
-    const message = document.createElement("article");
-    message.className = "message message-assistant";
-
-    const inner = document.createElement("div");
-    inner.className = "assistant-message";
-
-    const answer = createTextElement("div", "assistant-answer loading", "正在检索知识库并生成回答...");
-    const sourcesSection = document.createElement("section");
-    sourcesSection.className = "sources-section";
-    sourcesSection.hidden = true;
-
-    const sourcesHeading = createTextElement("div", "sources-heading", "引用来源 0");
-    const sourceList = document.createElement("div");
-    sourceList.className = "source-list";
-    sourcesSection.append(sourcesHeading, sourceList);
-
-    inner.append(createTextElement("div", "message-label", "RAG Builder"), answer, sourcesSection);
-    message.appendChild(inner);
-    chatMessages.appendChild(message);
-    return { answer, sourceList };
-}
-
-// 安全渲染有限 Markdown：支持加粗、段落换行和编号列表，其他内容始终按纯文本处理。
-function renderLimitedMarkdown(markdown, container) {
-    const lines = String(markdown ?? "").replace(/\r\n?/g, "\n").split("\n");
-    let paragraphLines = [];
-    let orderedList = null;
-
-    container.innerHTML = "";
-
-    const flushParagraph = () => {
-        if (paragraphLines.length === 0) {
-            return;
-        }
-
-        const paragraph = document.createElement("p");
-        paragraphLines.forEach((line, index) => {
-            if (index > 0) {
-                paragraph.appendChild(document.createElement("br"));
-            }
-
-            appendInlineMarkdown(paragraph, line);
-        });
-        container.appendChild(paragraph);
-        paragraphLines = [];
-    };
-
-    lines.forEach((line) => {
-        const orderedItem = line.match(/^\s*(\d+)[.)、]\s+(.+)$/);
-
-        if (orderedItem) {
-            flushParagraph();
-
-            if (!orderedList) {
-                orderedList = document.createElement("ol");
-                orderedList.start = Number(orderedItem[1]);
-                container.appendChild(orderedList);
-            }
-
-            const item = document.createElement("li");
-            appendInlineMarkdown(item, orderedItem[2]);
-            orderedList.appendChild(item);
-            return;
-        }
-
-        orderedList = null;
-
-        if (line.trim() === "") {
-            flushParagraph();
-            return;
-        }
-
-        paragraphLines.push(line);
+function renderDocuments() {
+    const keyword = elements.documentSearchInput.value.trim().toLowerCase();
+    const statusFilter = elements.documentStatusFilter.value;
+    const documents = latestDocuments.filter((doc) => {
+        const matchesKeyword = !keyword || doc.fileName.toLowerCase().includes(keyword);
+        const matchesStatus = statusFilter === "ALL" || doc.status === statusFilter;
+        return matchesKeyword && matchesStatus;
     });
 
-    flushParagraph();
-}
-
-// 安全渲染行内加粗语法，普通文本使用文本节点以避免 XSS。
-function appendInlineMarkdown(container, text) {
-    const value = String(text ?? "");
-    const boldPattern = /\*\*(.+?)\*\*/g;
-    let cursor = 0;
-    let match = boldPattern.exec(value);
-
-    while (match) {
-        container.appendChild(document.createTextNode(value.slice(cursor, match.index)));
-        container.appendChild(createTextElement("strong", "", match[1]));
-        cursor = match.index + match[0].length;
-        match = boldPattern.exec(value);
+    const selectionIsVisible = documents.some(
+        (doc) => String(doc.docId) === String(selectedDocumentId)
+    );
+    if (documents.length === 0) {
+        selectedDocumentId = null;
+    } else if (!selectionIsVisible) {
+        selectedDocumentId = documents[0].docId;
     }
 
-    container.appendChild(document.createTextNode(value.slice(cursor)));
-}
+    elements.documentsList.innerHTML = "";
+    elements.documentResultCount.textContent = `${documents.length} 个文档`;
+    renderDocumentDetail();
 
-// 记录本次会话最近的问题，并刷新侧栏历史列表。
-function addRecentQuestion(question) {
-    recentQuestionItems = [question, ...recentQuestionItems.filter((item) => item !== question)].slice(0, 7);
-    renderRecentQuestions();
-}
-
-// 渲染侧栏最近问答，点击后可重新填入问题。
-function renderRecentQuestions() {
-    recentQuestions.innerHTML = "";
-
-    if (recentQuestionItems.length === 0) {
-        recentQuestions.appendChild(createTextElement("div", "sidebar-empty", "本次会话暂无问答"));
+    if (documents.length === 0) {
+        elements.documentsList.appendChild(
+            createEmptyPanel(
+                latestDocuments.length === 0
+                    ? "暂无文档。上传 PDF 或 TXT 后，文档会显示在这里。"
+                    : "没有符合当前搜索和筛选条件的文档。"
+            )
+        );
         return;
     }
 
-    recentQuestionItems.forEach((question) => {
-        const button = createButton(question, "history-item", () => {
-            setView("chat");
-            questionInput.value = question;
-            resizeQuestionInput();
-            questionInput.focus();
+    documents.forEach((doc) => {
+        const row = document.createElement("article");
+        row.className = "document-row";
+        const selected = String(doc.docId) === String(selectedDocumentId);
+        row.classList.toggle("selected", selected);
+        row.setAttribute("aria-selected", String(selected));
+        row.tabIndex = 0;
+        row.addEventListener("click", (event) => {
+            if (!event.target.closest("button")) {
+                selectDocument(doc.docId);
+            }
         });
-        button.title = question;
-        recentQuestions.appendChild(button);
+        row.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" && !event.target.closest("button")) {
+                selectDocument(doc.docId);
+            }
+        });
+
+        const file = document.createElement("div");
+        file.className = "document-file";
+        file.append(
+            createTextElement("div", "document-title", doc.fileName),
+            createTextElement(
+                "div",
+                "document-id",
+                isMeaningful(doc.docId) ? `doc_id ${doc.docId}` : "doc_id 暂无"
+            )
+        );
+
+        const actions = document.createElement("div");
+        actions.className = "document-actions";
+        actions.append(
+            createButton("查看", "small-button", () => selectDocument(doc.docId)),
+            createButton("重试", "small-button", () => retryDocument(doc.docId), doc.status !== "FAILED"),
+            createButton("删除", "small-button danger", () => deleteDocument(doc.docId, doc.fileName))
+        );
+
+        row.append(
+            file,
+            createTextElement("span", "document-cell", doc.type),
+            createTextElement("span", "document-cell", formatFileSize(doc.fileSize)),
+            createStatusBadge(getDocumentStatusText(doc.status), getDocumentStatusClass(doc.status)),
+            createTextElement(
+                "span",
+                "document-cell",
+                isMeaningful(doc.chunkCount) ? String(doc.chunkCount) : "-"
+            ),
+            createTextElement("span", "document-cell", formatDate(doc.createdAt)),
+            actions
+        );
+        elements.documentsList.appendChild(row);
     });
 }
 
-// 渲染侧栏最近 5 个文档的简洁列表。
-function renderRecentDocuments(documents) {
-    recentDocuments.innerHTML = "";
-    const recent = normalizeArray(documents).slice(0, 5);
+function renderDashboardDocuments() {
+    elements.dashboardDocumentCount.textContent = String(latestDocuments.length);
+    elements.dashboardSuccessCount.textContent = String(
+        latestDocuments.filter((doc) => doc.status === "SUCCESS").length
+    );
+
+    const knownChunks = latestDocuments
+        .map((doc) => Number(doc.chunkCount))
+        .filter(Number.isFinite);
+    elements.dashboardChunkCount.textContent = knownChunks.length
+        ? String(knownChunks.reduce((sum, value) => sum + value, 0))
+        : "暂无统计";
+
+    elements.dashboardRecentDocuments.innerHTML = "";
+    const recent = latestDocuments.slice(0, 5);
 
     if (recent.length === 0) {
-        recentDocuments.appendChild(createTextElement("div", "sidebar-empty", "暂无最近文档"));
+        elements.dashboardRecentDocuments.appendChild(
+            createEmptyPanel("暂无文档。")
+        );
         return;
     }
 
     recent.forEach((doc) => {
-        const button = createButton(doc.file_name ?? "未命名文档", "history-item", () => setView("documents"));
-        button.title = `${doc.file_name ?? "未命名文档"} · ${doc.status ?? "UNKNOWN"}`;
-        recentDocuments.appendChild(button);
-    });
-}
-
-// 渲染日志面板中的文档选择器。
-function renderLogDocumentList(documents) {
-    logDocumentList.innerHTML = "";
-    const documentItems = normalizeArray(documents).map(normalizeDocument);
-
-    if (documentItems.length === 0) {
-        logDocumentList.appendChild(createEmptyState("暂无文档可查看"));
-        return;
-    }
-
-    documentItems.forEach((doc) => {
-        const button = createButton(doc.file_name, "document-picker-button", () => loadTaskLog(doc.doc_id));
-        button.classList.toggle("active", String(doc.doc_id) === String(lastSelectedDocId));
-        button.title = `doc_id=${doc.doc_id}`;
-        logDocumentList.appendChild(button);
-    });
-}
-
-// 渲染任务日志列表，兼容日志字段为空的情况。
-function renderTaskLogs(logs) {
-    const logItems = normalizeArray(logs);
-    taskLogContent.innerHTML = "";
-
-    if (logItems.length === 0) {
-        taskLogContent.appendChild(createEmptyState("暂无任务日志"));
-        return;
-    }
-
-    logItems.forEach((log) => {
-        const item = document.createElement("article");
-        item.className = "log-item";
-
-        const meta = document.createElement("div");
-        meta.className = "log-meta";
-        appendMeta(meta, `status=${log.status ?? "-"}`);
-        appendMeta(meta, `log_id=${log.id ?? "-"}`);
-
-        const chunkCount = log.chunk_count ?? log.chunkCount;
-        if (chunkCount !== undefined && chunkCount !== null) {
-            appendMeta(meta, `chunk_count=${chunkCount}`);
-        }
-
-        if (log.created_at) {
-            appendMeta(meta, `created_at=${formatDate(log.created_at)}`);
-        }
-
-        const message = log.error_message ?? log.message ?? "暂无任务日志";
-        item.append(
-            createTextElement("div", "log-title", log.task_name ?? "未命名任务"),
-            meta,
-            createTextElement("div", "source-text", String(message))
+        const row = document.createElement("div");
+        row.className = "compact-row";
+        row.append(
+            createTextElement("strong", "", doc.fileName),
+            createStatusBadge(getDocumentStatusText(doc.status), getDocumentStatusClass(doc.status)),
+            createTextElement("span", "", formatDate(doc.createdAt)),
+            createTextElement(
+                "span",
+                "",
+                isMeaningful(doc.chunkCount) ? String(doc.chunkCount) : "-"
+            )
         );
-        taskLogContent.appendChild(item);
+        elements.dashboardRecentDocuments.appendChild(row);
     });
 }
 
-// 重新派发失败文档的解析任务。
-async function retryDocument(docId) {
+function selectDocument(docId) {
+    selectedDocumentId = docId;
+    renderDocuments();
+}
+
+function renderDocumentDetail() {
+    const doc = latestDocuments.find(
+        (item) => String(item.docId) === String(selectedDocumentId)
+    );
+    elements.documentDetailContent.innerHTML = "";
+
+    if (!doc) {
+        elements.documentDetailContent.appendChild(
+            createCenteredEmpty("icon-file", "请选择文档", "点击文档行可查看当前可用的元数据。")
+        );
+        return;
+    }
+
+    const list = document.createElement("div");
+    list.className = "detail-list";
+    [
+        ["文件名", doc.fileName],
+        ["文档 ID", doc.docId],
+        ["文件类型", doc.type],
+        ["文件大小", formatFileSize(doc.fileSize)],
+        ["解析状态", getDocumentStatusText(doc.status)],
+        ["Chunks", isMeaningful(doc.chunkCount) ? doc.chunkCount : "暂无统计"],
+        ["上传时间", formatDate(doc.createdAt)]
+    ].forEach(([label, value]) => {
+        const row = document.createElement("div");
+        row.className = "detail-row";
+        row.append(
+            createTextElement("span", "", label),
+            createTextElement("strong", "", String(value ?? "-"))
+        );
+        list.appendChild(row);
+    });
+
+    elements.documentDetailContent.append(
+        list,
+        createTextElement(
+            "div",
+            "detail-note",
+            "原文读取接口当前未开放；此处只展示后端真实返回的文档元数据。"
+        )
+    );
+}
+
+function handleFileSelection() {
+    const file = elements.fileInput.files && elements.fileInput.files[0];
+    elements.selectedFileName.textContent = file
+        ? `${file.name} · ${formatFileSize(file.size)}`
+        : "支持 PDF、TXT；上传后由 Celery 异步解析。";
+
+    if (file && fileSelectionOrigin === "playground") {
+        uploadDocument();
+    }
+}
+
+async function uploadDocument() {
+    const file = elements.fileInput.files && elements.fileInput.files[0];
+
+    if (!file) {
+        showError("请先选择一个 PDF 或 TXT 文档。");
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+    setUploadLoading(true, file.name);
+
     try {
-        const response = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}/retry`, {
-            method: "POST"
+        const data = await fetchJson(`${API_BASE}/documents/upload`, {
+            method: "POST",
+            body: formData
         });
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
-        }
-
-        const data = await response.json();
-        showNotice(data.message ?? `文档 ${docId} 已重新加入解析队列。`);
+        renderKeyValues(elements.uploadResult, [
+            ["doc_id", firstMeaningful(data.doc_id, data.id)],
+            ["文件", firstMeaningful(data.file_name, file.name)],
+            ["状态", getDocumentStatusText(firstMeaningful(data.status, "PENDING"))],
+            ["说明", firstMeaningful(data.msg, data.message, "已加入解析队列")]
+        ]);
+        elements.composerHint.textContent = `${file.name} 已加入异步解析队列`;
+        showNotice("文档上传成功，解析任务已派发。");
+        elements.fileInput.value = "";
+        elements.selectedFileName.textContent = "支持 PDF、TXT；上传后由 Celery 异步解析。";
         await loadDocuments();
     } catch (error) {
-        showError(`重新解析失败：${getErrorText(error)}`);
+        elements.uploadResult.textContent = `上传失败：${getFriendlyError(error)}`;
+        elements.composerHint.textContent = "文档上传失败";
+        showError(`文档上传失败：${getFriendlyError(error)}`);
+    } finally {
+        setUploadLoading(false);
     }
 }
 
-// 删除指定文档，并在删除成功后刷新文档列表。
-async function deleteDocument(docId, fileName) {
-    const confirmed = window.confirm(`确定删除文档“${fileName}”吗？该操作会同时删除对应的向量片段。`);
+function setUploadLoading(isLoading, fileName = "") {
+    elements.uploadButton.disabled = isLoading;
+    elements.chooseFileButton.disabled = isLoading;
+    elements.attachmentButton.disabled = isLoading;
+    elements.uploadButton.textContent = isLoading ? "上传中..." : "上传文档";
 
+    if (isLoading) {
+        elements.uploadResult.textContent = `正在上传 ${fileName}...`;
+        elements.composerHint.textContent = `正在上传 ${fileName}...`;
+    }
+}
+
+async function retryDocument(docId) {
+    if (!isMeaningful(docId)) {
+        showError("当前文档缺少 doc_id，无法重试。");
+        return;
+    }
+
+    try {
+        const data = await fetchJson(
+            `${API_BASE}/documents/${encodeURIComponent(docId)}/retry`,
+            { method: "POST" }
+        );
+        showNotice(data.message || `文档 ${docId} 已重新加入解析队列。`);
+        await loadDocuments();
+    } catch (error) {
+        showError(`重新解析失败：${getFriendlyError(error)}`);
+    }
+}
+
+async function deleteDocument(docId, fileName) {
+    if (!isMeaningful(docId)) {
+        showError("当前文档缺少 doc_id，无法删除。");
+        return;
+    }
+
+    const confirmed = window.confirm(
+        `确定删除文档“${fileName}”吗？系统会同时尝试删除原文件和检索片段。`
+    );
     if (!confirmed) {
         return;
     }
 
     try {
-        const response = await fetch(`${API_BASE}/documents/${encodeURIComponent(docId)}`, {
-            method: "DELETE"
-        });
-
-        if (!response.ok) {
-            throw new Error(await readResponseError(response));
+        const data = await fetchJson(
+            `${API_BASE}/documents/${encodeURIComponent(docId)}`,
+            { method: "DELETE" }
+        );
+        if (String(selectedDocumentId) === String(docId)) {
+            selectedDocumentId = null;
         }
-
-        const data = await response.json();
-        showNotice(data.msg ?? "文档删除成功。");
+        showNotice(data.msg || "文档删除成功。");
         await loadDocuments();
     } catch (error) {
-        showError(`文档删除失败：${getErrorText(error)}`);
+        showError(`文档删除失败：${getFriendlyError(error)}`);
     }
 }
 
-// 自动调整聊天输入框高度，避免输入内容被遮挡。
-function resizeQuestionInput() {
-    questionInput.style.height = "auto";
-    questionInput.style.height = `${Math.min(questionInput.scrollHeight, 180)}px`;
+async function loadRecentTaskLogs() {
+    elements.refreshPipelineButton.disabled = true;
+    elements.pipelineTaskList.replaceChildren(
+        createEmptyPanel("正在读取最近解析任务...")
+    );
+
+    try {
+        if (latestDocuments.length === 0) {
+            await loadDocuments();
+        }
+
+        const candidates = latestDocuments.slice(0, 8);
+        const responses = await Promise.allSettled(
+            candidates
+                .filter((doc) => isMeaningful(doc.docId))
+                .map(async (doc) => ({
+                    doc,
+                    logs: normalizeArray(
+                        await fetchJson(
+                            `${API_BASE}/documents/${encodeURIComponent(doc.docId)}/task-log`
+                        )
+                    )
+                }))
+        );
+
+        const logs = responses
+            .filter((result) => result.status === "fulfilled")
+            .flatMap((result) => result.value.logs.map((log) => ({
+                ...log,
+                file_name: result.value.doc.fileName
+            })))
+            .sort((left, right) => dateValue(right.created_at) - dateValue(left.created_at))
+            .slice(0, 20);
+        renderPipelineLogs(logs);
+    } catch (error) {
+        renderPipelineLogs([]);
+        showError(`解析任务读取失败：${getFriendlyError(error)}`);
+    } finally {
+        elements.refreshPipelineButton.disabled = false;
+    }
 }
 
-// 将聊天区域滚动到最新消息。
-function scrollChatToBottom() {
-    window.setTimeout(() => {
-        chatScroll.scrollTop = chatScroll.scrollHeight;
-    }, 0);
+function renderPipelineLogs(logs) {
+    elements.pipelineTaskList.innerHTML = "";
+    elements.pipelineTaskCount.textContent = `${logs.length} 条`;
+
+    if (logs.length === 0) {
+        elements.pipelineTaskList.appendChild(
+            createEmptyPanel("暂无解析任务。上传文档后，解析流水线会显示在这里。")
+        );
+        return;
+    }
+
+    logs.forEach((log) => {
+        const row = document.createElement("div");
+        row.className = "pipeline-row";
+        const status = String(log.status || "UNKNOWN").toUpperCase();
+        row.append(
+            createTextElement("strong", "", isMeaningful(log.id) ? String(log.id) : "-"),
+            createTextElement("strong", "", String(log.file_name || "未命名文档")),
+            createStatusBadge(getTaskStatusText(status), getTaskStatusClass(status)),
+            createTextElement("span", "", formatDate(log.created_at)),
+            createTextElement("span", "", formatDuration(log.created_at, log.updated_at)),
+            createTextElement(
+                "span",
+                "pipeline-error",
+                String(log.error_message || log.message || "暂无补充信息")
+            )
+        );
+        elements.pipelineTaskList.appendChild(row);
+    });
 }
 
-// 关闭移动端侧栏抽屉。
+async function askQuestion() {
+    if (elements.askButton.disabled) {
+        return;
+    }
+
+    const question = elements.questionInput.value.trim();
+    if (!question) {
+        showError("请输入问题后再发送。");
+        elements.questionInput.focus();
+        return;
+    }
+
+    setView("playground");
+    elements.emptyState.classList.add("hidden");
+    appendUserMessage(question);
+    const assistant = createAssistantMessage();
+    const startedAt = performance.now();
+
+    elements.questionInput.value = "";
+    resizeQuestionInput();
+    setAskLoading(true);
+    elements.composerHint.textContent = "正在判断意图并准备回答...";
+    scrollChatToBottom();
+
+    try {
+        const data = await fetchJson(`${API_BASE}/search/ask`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ question })
+        });
+        const response = normalizeAnswerResponse(data);
+        response.latencyMs = performance.now() - startedAt;
+
+        assistant.answer.classList.remove("loading");
+        renderLimitedMarkdown(response.answer, assistant.answer);
+        updateAssistantState(assistant, response);
+        answerEvidenceById.set(assistant.answerId, {
+            answerType: response.answerType,
+            sources: response.sources
+        });
+        selectAssistantAnswer(assistant.answerId);
+        elements.composerHint.textContent = getComposerResultText(response);
+    } catch (error) {
+        assistant.answer.classList.remove("loading");
+        assistant.answer.classList.add("error");
+        assistant.answer.textContent = "本次问答没有完成。请检查文档解析状态和系统依赖后重试。";
+        assistant.state.className = "answer-state unanswerable";
+        assistant.state.textContent = "请求失败";
+        assistant.citation.textContent = "未生成有效引用";
+        assistant.latency.textContent = `${Math.round(performance.now() - startedAt)} ms`;
+        answerEvidenceById.set(assistant.answerId, {
+            answerType: "error",
+            sources: []
+        });
+        selectAssistantAnswer(assistant.answerId);
+        elements.composerHint.textContent = "问答失败，请检查系统状态";
+        showError(`问答请求失败：${getFriendlyError(error)}`);
+    } finally {
+        setAskLoading(false);
+        scrollChatToBottom();
+    }
+}
+
+function appendUserMessage(question) {
+    const message = document.createElement("div");
+    message.className = "message message-user";
+    message.appendChild(createTextElement("div", "user-bubble", question));
+    elements.chatMessages.appendChild(message);
+}
+
+function createAssistantMessage() {
+    const answerId = `answer-${++answerSequence}`;
+    const wrapper = document.createElement("div");
+    wrapper.className = "message";
+    const card = document.createElement("article");
+    card.className = "assistant-message";
+    card.dataset.answerId = answerId;
+    card.tabIndex = 0;
+    card.setAttribute("role", "button");
+    card.setAttribute("aria-pressed", "false");
+    card.setAttribute("aria-label", `查看第 ${answerSequence} 条助手回答的引用证据`);
+    card.title = "点击查看这条回答的引用证据";
+    card.addEventListener("click", () => selectAssistantAnswer(answerId));
+    card.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectAssistantAnswer(answerId);
+        }
+    });
+
+    const head = document.createElement("div");
+    head.className = "assistant-head";
+    const identity = document.createElement("div");
+    identity.className = "assistant-identity";
+    identity.append(
+        createTextElement("span", "assistant-avatar", "RB"),
+        createTextElement("span", "", "RAG Builder")
+    );
+    const state = createTextElement("span", "answer-state loading", "生成中");
+    head.append(identity, state);
+
+    const answer = createTextElement("div", "assistant-answer loading", "正在生成回答...");
+    const foot = document.createElement("div");
+    foot.className = "assistant-foot";
+    const citation = createTextElement("span", "", "等待引用");
+    const latency = createTextElement("strong", "", "-");
+    foot.append(citation, createTextElement("span", "", "·"), latency);
+
+    card.append(head, answer, foot);
+    wrapper.appendChild(card);
+    elements.chatMessages.appendChild(wrapper);
+    answerEvidenceById.set(answerId, {
+        answerType: "loading",
+        sources: []
+    });
+    selectAssistantAnswer(answerId);
+    return { answerId, card, answer, state, citation, latency };
+}
+
+function selectAssistantAnswer(answerId) {
+    const evidence = answerEvidenceById.get(answerId);
+    if (!evidence) {
+        return;
+    }
+
+    selectedAnswerId = answerId;
+    document.querySelectorAll(".assistant-message[data-answer-id]").forEach((card) => {
+        const selected = card.dataset.answerId === answerId;
+        card.classList.toggle("selected", selected);
+        card.setAttribute("aria-pressed", String(selected));
+    });
+    renderEvidence(evidence.sources, evidence.answerType);
+}
+
+function normalizeAnswerResponse(data) {
+    const answer = String(data?.answer ?? data?.result ?? "后端没有返回可展示的回答。");
+    const rawSources = Array.isArray(data?.citations)
+        ? data.citations
+        : Array.isArray(data?.sources)
+            ? data.sources
+            : Array.isArray(data?.chunks)
+                ? data.chunks
+                : [];
+    let answerType = String(data?.answer_type || "").toLowerCase();
+    const usedRetrieval = typeof data?.used_retrieval === "boolean"
+        ? data.used_retrieval
+        : answerType !== "chitchat";
+
+    if (!answerType) {
+        answerType = !usedRetrieval
+            ? "chitchat"
+            : isNoAnswerText(answer)
+                ? "unanswerable"
+                : "grounded";
+    }
+    if (isNoAnswerText(answer)) {
+        answerType = "unanswerable";
+    }
+
+    const sources = answerType === "grounded"
+        ? rawSources.map(normalizeSource).filter(isUsefulSource)
+        : [];
+    return { answer, answerType, usedRetrieval, sources };
+}
+
+function updateAssistantState(message, response) {
+    const state = getAnswerState(response.answerType);
+    message.state.className = `answer-state ${state.className}`;
+    message.state.textContent = state.label;
+    message.latency.textContent = `${Math.round(response.latencyMs)} ms`;
+
+    if (response.answerType === "grounded") {
+        message.citation.textContent = `已检索 · ${response.sources.length} 条有效引用`;
+    } else if (response.answerType === "chitchat") {
+        message.citation.textContent = "普通回复 · 未使用知识库检索";
+    } else {
+        message.citation.textContent = "已检索 · 0 条达到引用阈值";
+    }
+}
+
+function renderEvidence(sources, answerType) {
+    const items = normalizeArray(sources).map(normalizeSource).filter(isUsefulSource);
+    const state = getAnswerState(answerType);
+
+    elements.evidenceStatus.className = `answer-state ${state.className}`;
+    elements.evidenceStatus.textContent = state.label;
+    elements.evidenceCount.textContent = `${items.length} 条`;
+    elements.headerEvidenceCount.textContent = String(items.length);
+    elements.evidenceContent.innerHTML = "";
+
+    if (items.length === 0) {
+        const copy = {
+            loading: ["正在生成回答", "回答完成后将同步显示当前回答的引用证据。"],
+            chitchat: ["未触发知识库检索", "这是普通助手回复，未触发知识库检索。"],
+            unanswerable: ["没有可展示的证据", "未找到达到引用阈值的证据，因此未展示来源。"],
+            error: ["证据获取失败", "本次请求未完成，没有生成可核对的引用。"],
+            neutral: ["尚无引用证据", "当前回答没有使用知识库引用。"]
+        }[answerType] || ["当前回答没有引用", "当前回答没有使用知识库引用。"];
+        elements.evidenceContent.appendChild(
+            createCenteredEmpty("icon-panel", copy[0], copy[1])
+        );
+        return;
+    }
+
+    const list = document.createElement("div");
+    list.className = "source-list";
+    items.forEach((source, index) => list.appendChild(createSourceCard(source, index)));
+    elements.evidenceContent.appendChild(list);
+}
+
+function createSourceCard(source, index) {
+    const details = document.createElement("details");
+    details.className = "source-item";
+    details.open = index === 0;
+
+    const summary = document.createElement("summary");
+    const heading = document.createElement("span");
+    heading.className = "source-heading";
+    heading.append(
+        createTextElement("span", "source-title", source.fileName || "未知来源"),
+        createTextElement("span", "source-subtitle", getSourceSubtitle(source, index))
+    );
+    const scoreEntries = getSourceScoreEntries(source);
+    const primaryScore = scoreEntries[0];
+    summary.append(
+        heading,
+        createTextElement(
+            "span",
+            "source-score",
+            primaryScore
+                ? `${primaryScore[0]} ${formatScore(primaryScore[1])}`
+                : `#${index + 1}`
+        )
+    );
+
+    const body = document.createElement("div");
+    body.className = "source-body";
+    const meta = document.createElement("div");
+    meta.className = "source-meta";
+    appendMetaIfPresent(meta, "doc_id", source.docId);
+    appendMetaIfPresent(meta, "chunk_id", source.chunkId);
+    appendMetaIfPresent(meta, "page", source.pageNumber);
+    const scores = document.createElement("div");
+    scores.className = "score-strip";
+    scoreEntries.forEach(([label, value]) => {
+        appendScoreIfPresent(scores, label, value);
+    });
+    body.append(meta);
+    if (scores.childElementCount > 1) {
+        body.appendChild(scores);
+    }
+    body.appendChild(
+        createTextElement(
+            "div",
+            "source-text",
+            truncate(source.chunkText, 1600) || "暂无片段预览"
+        )
+    );
+    details.append(summary, body);
+    return details;
+}
+
+function getSourceSubtitle(source, index) {
+    const parts = [];
+    if (isMeaningful(source.pageNumber)) parts.push(`第 ${source.pageNumber} 页`);
+    if (isMeaningful(source.chunkId)) parts.push(`chunk ${source.chunkId}`);
+    return parts.length ? parts.join(" · ") : `来源片段 ${index + 1}`;
+}
+
+function getSourceScoreEntries(source) {
+    return [
+        ["Score", source.score],
+        ["Hybrid", source.hybridScore],
+        ["Vector", source.vectorScore],
+        ["Keyword", source.keywordScore],
+        ["Rerank", source.rerankScore]
+    ].filter(([, value]) => isMeaningful(value) && Number.isFinite(Number(value)));
+}
+
+function setAskLoading(isLoading) {
+    elements.askButton.disabled = isLoading;
+    elements.askButton.classList.toggle("loading", isLoading);
+    elements.attachmentButton.disabled = isLoading;
+}
+
+function getComposerResultText(response) {
+    if (response.answerType === "chitchat") {
+        return "普通回复完成 · 未调用知识库检索";
+    }
+    if (response.answerType === "unanswerable") {
+        return "未找到足够证据 · 未展示来源";
+    }
+    return `回答完成 · ${response.sources.length} 条有效引用`;
+}
+
+async function runRetrievalTest() {
+    const query = elements.retrievalQueryInput.value.trim();
+    const topK = Math.max(1, Math.min(20, Number(elements.retrievalTopKInput.value) || 5));
+    const useRerank = elements.retrievalRerankInput.value === "true";
+
+    if (!query) {
+        showError("请输入要测试的检索 query。");
+        elements.retrievalQueryInput.focus();
+        return;
+    }
+
+    elements.runRetrievalButton.disabled = true;
+    elements.runRetrievalButton.classList.add("is-loading");
+    elements.retrievalResults.replaceChildren(
+        createEmptyPanel("正在执行 Embedding 与 Hybrid 检索...")
+    );
+    elements.retrievalLatency.textContent = "运行中";
+    elements.retrievalRerankStatus.textContent = useRerank ? "尝试 Rerank" : "Rerank 未启用";
+
+    try {
+        const params = new URLSearchParams({
+            query,
+            top_k: String(topK),
+            use_rerank: String(useRerank)
+        });
+        const data = await fetchJson(`${API_BASE}/retrieval/test?${params.toString()}`);
+        renderRetrievalResults(data);
+    } catch (error) {
+        elements.retrievalResults.replaceChildren(
+            createCenteredEmpty(
+                "icon-search",
+                "检索测试未完成",
+                "请检查 Embedding 与 Elasticsearch 状态后重试。"
+            )
+        );
+        elements.retrievalLatency.textContent = "运行失败";
+        elements.retrievalRerankStatus.textContent = "状态未知";
+        showError(`检索测试失败：${getFriendlyError(error)}`);
+    } finally {
+        elements.runRetrievalButton.disabled = false;
+        elements.runRetrievalButton.classList.remove("is-loading");
+    }
+}
+
+function renderRetrievalResults(data) {
+    const results = normalizeArray(data?.results);
+    elements.retrievalLatency.textContent = `${formatNumber(data?.latency_ms, 2)} ms`;
+    elements.retrievalRerankStatus.textContent = getRerankStatusText(data?.rerank_status);
+    elements.retrievalRerankStatus.title = data?.rerank_message || "";
+    elements.retrievalResults.innerHTML = "";
+
+    if (results.length === 0) {
+        elements.retrievalResults.appendChild(
+            createCenteredEmpty("icon-search", "没有召回结果", "当前 query 未召回可展示的 chunk。")
+        );
+        return;
+    }
+
+    results.forEach((item, index) => {
+        const details = document.createElement("details");
+        details.className = "retrieval-result";
+        details.open = index === 0;
+        const summary = document.createElement("summary");
+        const title = document.createElement("div");
+        title.className = "retrieval-result-title";
+        const resultSource = normalizeSource(item);
+        title.append(
+            createTextElement("span", "retrieval-rank", `#${item.rank || index + 1}`),
+            createTextElement("strong", "", resultSource.fileName)
+        );
+        summary.append(
+            title,
+            createTextElement(
+                "span",
+                "source-score",
+                isMeaningful(item.score) ? formatScore(item.score) : "score -"
+            )
+        );
+
+        const body = document.createElement("div");
+        body.className = "source-body";
+        const meta = document.createElement("div");
+        meta.className = "source-meta";
+        appendMetaIfPresent(meta, "doc_id", item.doc_id);
+        appendMetaIfPresent(meta, "chunk_id", item.chunk_id);
+        appendMetaIfPresent(meta, "page", item.page_number);
+
+        const scores = document.createElement("div");
+        scores.className = "score-strip";
+        appendScoreIfPresent(scores, "Score", item.score);
+        appendScoreIfPresent(scores, "Hybrid", item.hybrid_score);
+        appendScoreIfPresent(scores, "Vector", item.vector_score);
+        appendScoreIfPresent(scores, "Keyword", item.keyword_score);
+        appendScoreIfPresent(scores, "Rerank", item.rerank_score);
+
+        body.append(meta);
+        if (scores.childElementCount) body.appendChild(scores);
+        body.appendChild(
+            createTextElement(
+                "div",
+                "retrieval-preview",
+                truncate(String(item.chunk_text || ""), 2200) || "该结果未返回 chunk_text。"
+            )
+        );
+        details.append(summary, body);
+        elements.retrievalResults.appendChild(details);
+    });
+}
+
+async function loadEvaluation() {
+    elements.refreshEvaluationButton.disabled = true;
+
+    try {
+        latestEvaluation = await fetchJson(`${API_BASE}/eval/report`);
+        renderEvaluation(latestEvaluation);
+    } catch (error) {
+        latestEvaluation = {
+            available: false,
+            message: "评测报告暂时无法读取，请运行评测命令后刷新。"
+        };
+        renderEvaluation(latestEvaluation);
+    } finally {
+        elements.refreshEvaluationButton.disabled = false;
+    }
+}
+
+function renderEvaluation(data) {
+    const retrieval = data?.retrieval || {};
+    const answer = data?.answer || {};
+    const baseline = retrieval?.baseline || {};
+    const metrics = {
+        hit_rate: formatPercent(baseline.hit_rate_at_k),
+        recall: formatPercent(baseline.recall_at_k),
+        precision: formatPercent(baseline.precision_at_k),
+        mrr: formatPercent(baseline.mrr),
+        claim_hit: formatPercent(answer.expected_claim_hit_rate),
+        unsupported: isMeaningful(answer.unsupported_claim_count)
+            ? String(answer.unsupported_claim_count)
+            : "-",
+        abstention: formatPercent(answer.unanswerable_abstention_rate),
+        rerank: getRerankStatusText(retrieval.rerank_status)
+    };
+
+    Object.entries(metrics).forEach(([name, value]) => {
+        const target = document.querySelector(`[data-metric="${name}"]`);
+        if (target) target.textContent = value;
+    });
+
+    elements.evaluationGeneratedAt.textContent = data?.generated_at
+        ? formatDate(data.generated_at)
+        : "尚未生成";
+    elements.evaluationMessage.textContent = data?.message || "暂无评测报告。";
+    renderEvaluationFailures(normalizeArray(data?.failures));
+    renderDashboardEvaluation(data);
+}
+
+function renderDashboardEvaluation(data) {
+    const retrieval = data?.retrieval || {};
+    const answer = data?.answer || {};
+    const baseline = retrieval?.baseline || {};
+    const values = [
+        ["Hit Rate", formatPercent(baseline.hit_rate_at_k)],
+        ["Recall", formatPercent(baseline.recall_at_k)],
+        ["Precision", formatPercent(baseline.precision_at_k)],
+        ["MRR", formatPercent(baseline.mrr)],
+        ["Claim Hit", formatPercent(answer.expected_claim_hit_rate)],
+        [
+            "Unsupported",
+            isMeaningful(answer.unsupported_claim_count)
+                ? String(answer.unsupported_claim_count)
+                : "-"
+        ]
+    ];
+
+    elements.dashboardEvalMetrics.innerHTML = "";
+    values.forEach(([label, value]) => {
+        const item = document.createElement("div");
+        item.append(
+            createTextElement("span", "", label),
+            createTextElement("strong", "", value)
+        );
+        elements.dashboardEvalMetrics.appendChild(item);
+    });
+
+    const answerCaseCount = Number(answer.answer_case_count);
+    const answerFailures = new Set(
+        normalizeArray(answer.failures)
+            .map((failure) => failure.case_id)
+            .filter(isMeaningful)
+    ).size;
+    elements.dashboardEvalRate.textContent = Number.isFinite(answerCaseCount) && answerCaseCount > 0
+        ? formatPercent(Math.max(0, answerCaseCount - answerFailures) / answerCaseCount)
+        : "暂无评测数据";
+    elements.dashboardEvalSource.textContent = data?.available
+        ? "基于最近一次 eval_report.md 统计"
+        : "暂无评测数据";
+    elements.dashboardEvalFallback.classList.toggle("hidden", Boolean(data?.available));
+}
+
+function renderEvaluationFailures(failures) {
+    elements.evaluationFailureList.innerHTML = "";
+    elements.evaluationFailureCount.textContent = `${failures.length} 条`;
+
+    if (failures.length === 0) {
+        elements.evaluationFailureList.appendChild(
+            createEmptyPanel("暂无失败用例。")
+        );
+        return;
+    }
+
+    failures.forEach((failure) => {
+        const row = document.createElement("div");
+        row.className = "failure-row";
+        row.append(
+            createTextElement("strong", "", String(failure.case_id || "-")),
+            createTextElement("span", "", String(failure.query || "-")),
+            createTextElement(
+                "span",
+                "",
+                String(failure.failure_reason || failure.reason || "未提供失败原因")
+            )
+        );
+        elements.evaluationFailureList.appendChild(row);
+    });
+}
+
+async function loadSystemStatus() {
+    setHealthLoading(true);
+
+    try {
+        latestSystemStatus = await fetchJson(`${API_BASE}/system/status`);
+    } catch (consoleError) {
+        latestSystemStatus = await loadLegacySystemStatus();
+    }
+
+    renderSystemStatus(latestSystemStatus);
+    setHealthLoading(false);
+}
+
+async function loadLegacySystemStatus() {
+    const [apiResult, dependencyResult] = await Promise.allSettled([
+        fetchJson(`${API_BASE}/health`),
+        fetchJson(`${API_BASE}/health/dependencies`)
+    ]);
+    const components = {};
+
+    components.fastapi = apiResult.status === "fulfilled"
+        ? { name: "FastAPI", status: "ok", message: "FastAPI 健康接口可响应" }
+        : { name: "FastAPI", status: "error", message: "FastAPI 健康接口不可用" };
+
+    if (dependencyResult.status === "fulfilled") {
+        const dependencies = dependencyResult.value?.dependencies || {};
+        Object.entries(dependencies).forEach(([key, value]) => {
+            components[key.toLowerCase()] = {
+                name: value?.name || key,
+                status: value?.status || "unknown",
+                message: value?.message || "当前没有可用状态"
+            };
+        });
+    }
+
+    HEALTH_ORDER.forEach((key) => {
+        if (!components[key]) {
+            components[key] = {
+                name: getComponentName(key),
+                status: "unknown",
+                message: "当前接口没有返回该组件状态"
+            };
+        }
+    });
+
+    const runtime = HEALTH_ORDER.map((key) => components[key].status);
+    return {
+        status: runtime.every(
+            (status) => ["ok", "configured", "disabled"].includes(status)
+        ) ? "ok" : "degraded",
+        components,
+        retrieval: {}
+    };
+}
+
+function setHealthLoading(isLoading) {
+    elements.refreshHealthButton.disabled = isLoading;
+    elements.sidebarRefreshStatus.disabled = isLoading;
+    if (isLoading) {
+        elements.overallHealth.className = "status-badge neutral";
+        elements.overallHealth.textContent = "检查中";
+    }
+}
+
+function renderSystemStatus(data) {
+    const components = data?.components || {};
+    const overall = String(data?.status || "unknown").toLowerCase();
+    elements.healthGrid.innerHTML = "";
+
+    HEALTH_ORDER.forEach((key) => {
+        const component = findComponent(components, key);
+        const card = document.createElement("article");
+        card.className = "health-card";
+        card.append(
+            createTextElement("h3", "", component.name || getComponentName(key)),
+            createStatusBadge(
+                getDependencyStatusText(component.status),
+                getHealthStatusClass(component.status)
+            ),
+            createTextElement("p", "", component.message || "当前没有可用状态")
+        );
+        if (isMeaningful(component.model)) {
+            card.appendChild(
+                createTextElement("div", "health-model", `model: ${component.model}`)
+            );
+        }
+        elements.healthGrid.appendChild(card);
+    });
+
+    elements.overallHealth.className = `status-badge ${getHealthStatusClass(overall)}`;
+    elements.overallHealth.textContent = getOverallHealthText(overall);
+    elements.globalStatusDot.className = `status-dot ${getHealthDotClass(overall)}`;
+    elements.globalStatusText.textContent = `系统状态${getOverallHealthText(overall)}`;
+    elements.sidebarOverallDot.className = `status-dot ${getHealthDotClass(overall)}`;
+    elements.sidebarOverallText.textContent = `系统${getOverallHealthText(overall)}`;
+
+    renderSidebarHealth(components, data?.api_port);
+    renderRetrievalConfiguration(data?.retrieval || {});
+}
+
+function renderSidebarHealth(components, apiPort) {
+    elements.sidebarHealthList.innerHTML = "";
+    SIDEBAR_HEALTH_ORDER.forEach((key) => {
+        const component = findComponent(components, key);
+        const item = document.createElement("div");
+        item.className = "mini-status";
+        const label = key === "fastapi"
+            ? getFastApiRuntimeLabel(apiPort)
+            : component.name || getComponentName(key);
+        item.append(
+            createTextElement("span", `status-dot ${getHealthDotClass(component.status)}`, ""),
+            createTextElement("span", "", label),
+            createTextElement("b", "", getDependencyStatusText(component.status))
+        );
+        elements.sidebarHealthList.appendChild(item);
+    });
+}
+
+function getFastApiRuntimeLabel(apiPort) {
+    const currentPort = window.location.port;
+    if (currentPort) {
+        return `FastAPI :${currentPort}`;
+    }
+    if (isMeaningful(apiPort)) {
+        return `FastAPI :${apiPort}`;
+    }
+    return "FastAPI 当前连接";
+}
+
+function renderRetrievalConfiguration(config) {
+    elements.playgroundMode.textContent = config.mode || "Hybrid";
+    elements.playgroundTopK.textContent = isMeaningful(config.top_k)
+        ? String(config.top_k)
+        : "5";
+    elements.playgroundRerank.textContent = config.rerank_enabled ? "已启用" : "未启用";
+    elements.playgroundThreshold.textContent = isMeaningful(config.citation_threshold)
+        ? Number(config.citation_threshold).toFixed(2)
+        : "0.60";
+}
+
+function toggleContextPanel() {
+    const open = document.body.classList.toggle("context-open");
+    elements.evidenceToggle.setAttribute("aria-expanded", String(open));
+}
+
+function closeContextPanel() {
+    document.body.classList.remove("context-open");
+    elements.evidenceToggle.setAttribute("aria-expanded", "false");
+}
+
 function closeSidebar() {
     document.body.classList.remove("sidebar-open");
 }
 
-// 从不同后端返回格式中提取数组。
+function resizeQuestionInput() {
+    elements.questionInput.style.height = "auto";
+    elements.questionInput.style.height = `${Math.min(elements.questionInput.scrollHeight, 168)}px`;
+}
+
+function scrollChatToBottom() {
+    window.setTimeout(() => {
+        elements.chatScroll.scrollTop = elements.chatScroll.scrollHeight;
+    }, 0);
+}
+
+function renderLimitedMarkdown(text, container) {
+    container.innerHTML = "";
+    const lines = String(text || "").split(/\r?\n/);
+    let list = null;
+
+    lines.forEach((rawLine) => {
+        const line = rawLine.trim();
+        if (!line) {
+            list = null;
+            return;
+        }
+
+        const listMatch = line.match(/^(\d+)[.、]\s*(.+)$/);
+        if (listMatch) {
+            if (!list) {
+                list = document.createElement("ol");
+                container.appendChild(list);
+            }
+            const item = document.createElement("li");
+            appendInlineMarkdown(item, listMatch[2]);
+            list.appendChild(item);
+            return;
+        }
+
+        list = null;
+        const paragraph = document.createElement("p");
+        appendInlineMarkdown(paragraph, line.replace(/^[-*]\s+/, ""));
+        container.appendChild(paragraph);
+    });
+
+    if (!container.childElementCount) {
+        container.textContent = String(text || "");
+    }
+}
+
+function appendInlineMarkdown(container, text) {
+    const parts = String(text).split(/(\*\*[^*]+\*\*)/g);
+    parts.forEach((part) => {
+        if (part.startsWith("**") && part.endsWith("**")) {
+            container.appendChild(
+                createTextElement("strong", "", part.slice(2, -2))
+            );
+        } else if (part) {
+            container.appendChild(document.createTextNode(part));
+        }
+    });
+}
+
 function normalizeArray(value) {
-    if (Array.isArray(value)) {
-        return value;
-    }
-
-    if (Array.isArray(value?.items)) {
-        return value.items;
-    }
-
-    if (Array.isArray(value?.documents)) {
-        return value.documents;
-    }
-
-    if (Array.isArray(value?.data)) {
-        return value.data;
-    }
-
+    if (Array.isArray(value)) return value;
+    if (Array.isArray(value?.items)) return value.items;
+    if (Array.isArray(value?.documents)) return value.documents;
+    if (Array.isArray(value?.data)) return value.data;
+    if (Array.isArray(value?.results)) return value.results;
     return [];
 }
 
-// 标准化文档字段，兼容 doc_id/id、file_name/filename 等命名差异。
 function normalizeDocument(doc) {
+    const fileName = String(
+        firstMeaningful(doc?.file_name, doc?.filename, doc?.name, "未命名文档")
+    );
     return {
-        doc_id: doc?.doc_id ?? doc?.id ?? doc?.document_id ?? "-",
-        file_name: doc?.file_name ?? doc?.filename ?? doc?.name ?? "未命名文档",
-        status: String(doc?.status ?? "UNKNOWN").toUpperCase(),
-        created_at: doc?.created_at ?? doc?.createdAt ?? null,
-        updated_at: doc?.updated_at ?? doc?.updatedAt ?? null
+        docId: firstMeaningful(doc?.doc_id, doc?.id, doc?.document_id),
+        fileName,
+        type: getFileType(fileName),
+        status: String(doc?.status || "UNKNOWN").toUpperCase(),
+        createdAt: firstMeaningful(doc?.created_at, doc?.createdAt),
+        chunkCount: firstMeaningful(doc?.chunk_count, doc?.chunkCount),
+        fileSize: firstMeaningful(doc?.file_size, doc?.fileSize, doc?.size)
     };
 }
 
-// 从响应中读取错误文本，优先使用 FastAPI 的 detail 字段。
-async function readResponseError(response) {
-    try {
-        const data = await response.json();
+function normalizeSource(source) {
+    const item = source && typeof source === "object" ? source : {};
+    const metadata = item.metadata && typeof item.metadata === "object"
+        ? item.metadata
+        : {};
+    const docId = firstMeaningful(
+        item.doc_id,
+        item.document_id,
+        item.source_id,
+        item.id,
+        metadata.doc_id,
+        metadata.document_id
+    );
+    const chunkId = firstMeaningful(
+        item.chunk_id,
+        item.chunkId,
+        metadata.chunk_id
+    );
+    const explicitName = normalizeSourceName(firstMeaningful(
+        item.document_name,
+        item.filename,
+        item.file_name,
+        item.doc_name,
+        item.source_name,
+        metadata.filename,
+        metadata.document_name,
+        metadata.file_name
+    ));
+    return {
+        docId,
+        fileName: explicitName || buildSourceFallback(docId, chunkId),
+        chunkId,
+        pageNumber: firstMeaningful(
+            item.page_number,
+            item.page,
+            item.pageNumber,
+            metadata.page_number,
+            metadata.page
+        ),
+        chunkText: String(firstMeaningful(
+            item.preview,
+            item.text_preview,
+            item.content,
+            item.chunk_text,
+            item.text,
+            metadata.preview,
+            metadata.text_preview,
+            metadata.content,
+            metadata.chunk_text,
+            metadata.text
+        ) ?? ""),
+        score: firstMeaningful(item.score, item._score, item.similarity),
+        hybridScore: firstMeaningful(item.hybrid_score, item.hybridScore),
+        vectorScore: firstMeaningful(item.vector_score, item.vectorScore),
+        keywordScore: firstMeaningful(item.keyword_score, item.keywordScore),
+        rerankScore: firstMeaningful(
+            item.rerank_score,
+            item.rerankScore,
+            item.semantic_score
+        )
+    };
+}
 
-        if (typeof data?.detail === "string") {
-            return data.detail;
-        }
-
-        if (Array.isArray(data?.detail)) {
-            return data.detail.map((item) => item.msg ?? JSON.stringify(item)).join("；");
-        }
-
-        if (typeof data?.message === "string") {
-            return data.message;
-        }
-    } catch (error) {
-        return `${response.status} ${response.statusText || "请求失败"}`;
+function normalizeSourceName(value) {
+    if (!isMeaningful(value)) {
+        return null;
     }
-
-    return `${response.status} ${response.statusText || "请求失败"}`;
+    const normalized = String(value).trim();
+    return normalized === "未命名来源" ? null : normalized;
 }
 
-// 获取可展示的错误文本，避免异常对象为空时显示 undefined。
-function getErrorText(error) {
-    return error?.message || "未知错误";
+function buildSourceFallback(docId, chunkId) {
+    if (isMeaningful(chunkId)) {
+        const chunkToken = String(chunkId);
+        if (chunkToken.startsWith("doc_")) {
+            return `来源：${chunkToken}`;
+        }
+        if (isMeaningful(docId)) {
+            const docToken = String(docId).startsWith("doc_")
+                ? String(docId)
+                : `doc_${docId}`;
+            return `来源：${docToken}_${chunkToken}`;
+        }
+        return `来源：${chunkToken}`;
+    }
+    if (isMeaningful(docId)) {
+        const docToken = String(docId);
+        return docToken.startsWith("doc_")
+            ? `来源：${docToken}`
+            : `来源：doc_${docToken}`;
+    }
+    return "未知来源";
 }
 
-// 生成文本文档节点。
+function isUsefulSource(source) {
+    return [
+        source.docId,
+        source.fileName !== "未知来源" ? source.fileName : null,
+        source.chunkId,
+        source.pageNumber,
+        source.chunkText
+    ].some(isMeaningful);
+}
+
+function getAnswerState(answerType) {
+    if (answerType === "grounded") return { label: "已基于知识库生成", className: "grounded" };
+    if (answerType === "chitchat") return { label: "普通助手回复", className: "chitchat" };
+    if (answerType === "unanswerable") return { label: "未找到足够依据", className: "unanswerable" };
+    if (answerType === "error") return { label: "请求失败", className: "unanswerable" };
+    if (answerType === "loading") return { label: "生成中", className: "loading" };
+    return { label: "等待提问", className: "neutral" };
+}
+
+function isNoAnswerText(answer) {
+    const text = String(answer || "").replace(/\s+/g, "");
+    return [
+        "知识库中没有足够依据",
+        "知识库中暂无足够依据",
+        "没有足够依据回答",
+        "无法根据当前知识库",
+        "未找到足够"
+    ].some((phrase) => text.includes(phrase.replace(/\s+/g, "")));
+}
+
+function createStatusBadge(text, statusClass) {
+    return createTextElement("span", `status-badge ${statusClass}`, text);
+}
+
+function createCenteredEmpty(iconId, title, text) {
+    const empty = document.createElement("div");
+    empty.className = "empty-panel centered";
+    empty.append(
+        createSvgIcon(iconId),
+        createTextElement("strong", "", title),
+        createTextElement("p", "", text)
+    );
+    return empty;
+}
+
+function createEmptyPanel(text) {
+    return createTextElement("div", "empty-panel", text);
+}
+
 function createTextElement(tagName, className, text) {
     const element = document.createElement(tagName);
-
-    if (className) {
-        element.className = className;
-    }
-
+    if (className) element.className = className;
     element.textContent = text;
     return element;
 }
 
-// 生成空状态节点。
-function createEmptyState(text) {
-    return createTextElement("div", "empty-state", text);
+function createSvgIcon(symbolId) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+    svg.setAttribute("class", "icon");
+    svg.setAttribute("aria-hidden", "true");
+    use.setAttribute("href", `#${symbolId}`);
+    svg.appendChild(use);
+    return svg;
 }
 
-// 生成按钮节点，并绑定点击事件。
-function createButton(text, className, onClick) {
+function createButton(text, className, onClick, disabled = false) {
     const button = document.createElement("button");
     button.type = "button";
     button.className = className;
     button.textContent = text;
-    button.addEventListener("click", onClick);
+    button.disabled = disabled;
+    button.addEventListener("click", (event) => {
+        event.stopPropagation();
+        onClick();
+    });
     return button;
 }
 
-// 为 meta 容器追加一段元信息。
-function appendMeta(container, text) {
-    container.appendChild(createTextElement("span", "", text));
-}
-
-// 渲染键值结果，用于展示上传响应。
 function renderKeyValues(container, rows) {
     container.innerHTML = "";
     const list = document.createElement("div");
     list.className = "kv-list";
-
     rows.forEach(([key, value]) => {
+        if (!isMeaningful(value)) return;
         const row = document.createElement("div");
         row.className = "kv-row";
         row.append(
             createTextElement("span", "kv-key", key),
-            createTextElement("span", "kv-value", String(value ?? "-"))
+            createTextElement("span", "kv-value", String(value))
         );
         list.appendChild(row);
     });
-
     container.appendChild(list);
 }
 
-// 根据文档状态返回对应的视觉样式。
+function appendMetaIfPresent(container, key, value) {
+    if (isMeaningful(value)) {
+        container.appendChild(
+            createTextElement("span", "meta-chip", `${key}: ${value}`)
+        );
+    }
+}
+
+function appendScoreIfPresent(container, label, value) {
+    if (isMeaningful(value) && Number.isFinite(Number(value))) {
+        container.appendChild(
+            createTextElement("span", "score-chip", `${label} ${formatScore(value)}`)
+        );
+    }
+}
+
+function findComponent(components, key) {
+    if (Array.isArray(components)) {
+        return components.find((item) => {
+            const name = String(item?.name || item?.key || "").toLowerCase();
+            return name === key || name.includes(key);
+        }) || { name: getComponentName(key), status: "unknown", message: "当前没有可用状态" };
+    }
+    return components?.[key]
+        || components?.[getComponentName(key)]
+        || { name: getComponentName(key), status: "unknown", message: "当前没有可用状态" };
+}
+
+function getComponentName(key) {
+    return {
+        fastapi: "FastAPI",
+        postgresql: "PostgreSQL",
+        minio: "MinIO",
+        redis: "Redis",
+        elasticsearch: "Elasticsearch",
+        celery: "Celery Worker",
+        embedding: "Embedding Model",
+        llm: "LLM",
+        rerank: "Rerank Model"
+    }[key] || key;
+}
+
 function getDocumentStatusClass(status) {
-    const normalized = String(status ?? "").toUpperCase();
-
-    if (normalized === "SUCCESS") {
-        return "success";
-    }
-
-    if (normalized === "FAILED") {
-        return "danger";
-    }
-
-    if (normalized === "PARSING") {
-        return "info";
-    }
-
-    if (normalized === "PENDING") {
-        return "neutral";
-    }
-
+    const value = String(status || "").toUpperCase();
+    if (value === "SUCCESS") return "success";
+    if (value === "FAILED") return "danger";
+    if (value === "PARSING") return "info";
+    if (value === "PENDING") return "neutral";
     return "warning";
 }
 
-// 根据依赖服务状态返回对应的视觉样式。
-function getHealthStatusClass(status) {
-    const normalized = String(status ?? "").toLowerCase();
+function getDocumentStatusText(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "SUCCESS") return "解析成功";
+    if (value === "FAILED") return "解析失败";
+    if (value === "PARSING") return "解析中";
+    if (value === "PENDING") return "待解析";
+    return "状态未知";
+}
 
-    if (normalized === "ok" || normalized === "success") {
-        return "success";
-    }
-
-    if (normalized === "error" || normalized === "failed" || normalized === "fail") {
-        return "danger";
-    }
-
-    if (normalized === "degraded" || normalized === "warning") {
-        return "warning";
-    }
-
+function getTaskStatusClass(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "SUCCESS") return "success";
+    if (value === "FAILED") return "danger";
+    if (value === "STARTED") return "info";
     return "neutral";
 }
 
-// 把整体健康状态转换成中文展示文本。
-function getOverallHealthText(status) {
-    const normalized = String(status ?? "").toLowerCase();
-
-    if (normalized === "ok") {
-        return "正常";
-    }
-
-    if (normalized === "degraded") {
-        return "部分异常";
-    }
-
-    if (normalized === "error") {
-        return "异常";
-    }
-
-    return "检查中";
+function getTaskStatusText(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "SUCCESS") return "成功";
+    if (value === "FAILED") return "失败";
+    if (value === "STARTED") return "执行中";
+    return "状态未知";
 }
 
-// 把单个依赖服务状态转换成中文展示文本。
+function getHealthStatusClass(status) {
+    const value = String(status || "").toLowerCase();
+    if (["ok", "success", "configured"].includes(value)) return "success";
+    if (["error", "failed", "fail"].includes(value)) return "danger";
+    if (["degraded", "warning"].includes(value)) return "warning";
+    if (value === "disabled") return "neutral";
+    return "neutral";
+}
+
+function getHealthDotClass(status) {
+    const value = String(status || "").toLowerCase();
+    if (["ok", "success", "configured"].includes(value)) return "ok";
+    if (["error", "failed", "fail"].includes(value)) return "error";
+    if (["degraded", "warning"].includes(value)) return "warning";
+    if (value === "disabled") return "disabled";
+    return "unknown";
+}
+
 function getDependencyStatusText(status) {
-    const normalized = String(status ?? "").toLowerCase();
-
-    if (normalized === "ok" || normalized === "success") {
-        return "正常";
-    }
-
-    if (normalized === "error" || normalized === "failed" || normalized === "fail") {
-        return "异常";
-    }
-
-    if (normalized === "degraded" || normalized === "warning") {
-        return "警告";
-    }
-
-    return "检查中";
+    const value = String(status || "").toLowerCase();
+    if (["ok", "success"].includes(value)) return "正常";
+    if (value === "configured") return "已配置";
+    if (value === "disabled") return "未启用";
+    if (["error", "failed", "fail"].includes(value)) return "异常";
+    if (["degraded", "warning"].includes(value)) return "部分异常";
+    if (value === "checking") return "检查中";
+    return "未知";
 }
 
-// 在对象或数组格式的依赖结果中查找指定服务。
-function findDependency(dependencies, service) {
-    if (Array.isArray(dependencies)) {
-        return dependencies.find((item) => {
-            const name = String(item?.name ?? item?.key ?? "").toLowerCase();
-            return name === service.key || name === service.label.toLowerCase();
-        });
-    }
-
-    return dependencies?.[service.key] ?? dependencies?.[service.label] ?? null;
+function getOverallHealthText(status) {
+    const value = String(status || "").toLowerCase();
+    if (value === "ok") return "正常";
+    if (value === "degraded") return "部分异常";
+    if (value === "error") return "异常";
+    return "未知";
 }
 
-// 格式化时间字段，失败时返回原始文本。
+function getRerankStatusText(status) {
+    const value = String(status || "").toLowerCase();
+    if (value === "enabled") return "已启用";
+    if (value === "disabled") return "未启用";
+    if (value === "unavailable") return "不可用";
+    if (value === "failed") return "执行失败";
+    return isMeaningful(status) ? String(status) : "-";
+}
+
+function getFileType(fileName) {
+    const suffix = String(fileName).split(".").pop();
+    return suffix && suffix !== fileName ? suffix.toUpperCase() : "-";
+}
+
+function firstMeaningful(...values) {
+    return values.find(isMeaningful);
+}
+
+function isMeaningful(value) {
+    if (value === undefined || value === null) {
+        return false;
+    }
+    const normalized = String(value).trim();
+    return normalized !== ""
+        && !["undefined", "null", "nan"].includes(normalized.toLowerCase());
+}
+
+function truncate(value, maxLength) {
+    const text = String(value || "");
+    return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+}
+
+function dateValue(value) {
+    const time = new Date(value || 0).getTime();
+    return Number.isFinite(time) ? time : 0;
+}
+
 function formatDate(value) {
+    if (!value) return "-";
     const date = new Date(value);
-
-    if (Number.isNaN(date.getTime())) {
-        return String(value);
-    }
-
-    return date.toLocaleString("zh-CN", { hour12: false });
+    if (Number.isNaN(date.getTime())) return String(value);
+    return date.toLocaleString("zh-CN", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false
+    });
 }
 
-// 展示页面右下角轻量提示。
+function formatDuration(startValue, endValue) {
+    if (!startValue || !endValue) return "-";
+    const durationMs = new Date(endValue).getTime() - new Date(startValue).getTime();
+    if (!Number.isFinite(durationMs) || durationMs < 0) return "-";
+    if (durationMs < 1000) return `${durationMs} ms`;
+    if (durationMs < 60000) return `${(durationMs / 1000).toFixed(1)} s`;
+    return `${(durationMs / 60000).toFixed(1)} min`;
+}
+
+function formatFileSize(value) {
+    const bytes = Number(value);
+    if (!Number.isFinite(bytes) || bytes < 0) return "-";
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatScore(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toFixed(4) : String(value);
+}
+
+function formatNumber(value, digits = 2) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number.toFixed(digits) : "-";
+}
+
+function formatPercent(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? `${(number * 100).toFixed(1)}%` : "-";
+}
+
+async function readResponseError(response) {
+    try {
+        const data = await response.json();
+        if (typeof data?.detail === "string") return data.detail;
+        if (Array.isArray(data?.detail)) {
+            return data.detail.map((item) => item.msg || "请求参数错误").join("；");
+        }
+        if (typeof data?.message === "string") return data.message;
+        if (typeof data?.msg === "string") return data.msg;
+    } catch (error) {
+        return `${response.status} ${response.statusText || "请求失败"}`;
+    }
+    return `${response.status} ${response.statusText || "请求失败"}`;
+}
+
+function getFriendlyError(error) {
+    const message = String(error?.message || "");
+    if (!message || message === "Failed to fetch") {
+        return "无法连接到本地服务";
+    }
+    return message;
+}
+
+function showError(message) {
+    showToast(message, "error");
+}
+
+function showNotice(message) {
+    showToast(message, "notice");
+}
+
 function showToast(message, type) {
     const toast = createTextElement("div", `toast ${type}`, message);
-    toastRegion.appendChild(toast);
-
-    window.setTimeout(() => {
-        toast.remove();
-    }, 4200);
+    elements.toastRegion.appendChild(toast);
+    window.setTimeout(() => toast.remove(), 4200);
 }
