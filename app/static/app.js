@@ -1,26 +1,37 @@
 const API_BASE = "/api/v1";
 
 const VIEW_META = {
-    dashboard: { eyebrow: "Workspace overview", title: "总览" },
-    playground: { eyebrow: "Knowledge playground", title: "知识库问答" },
-    documents: { eyebrow: "Knowledge assets", title: "文档管理" },
-    pipeline: { eyebrow: "Processing observability", title: "解析流水线" },
+    dashboard: { eyebrow: "Knowledge workspace", title: "全部知识库" },
+    playground: { eyebrow: "Knowledge playground", title: "RAG 问答" },
+    documents: { eyebrow: "Knowledge assets", title: "文档集合" },
+    pipeline: { eyebrow: "Upload and processing", title: "上传解析" },
     retrieval: { eyebrow: "Retrieval inspection", title: "检索调试" },
     evaluation: { eyebrow: "RAG quality evaluation", title: "评测报告" },
     health: { eyebrow: "Runtime dependencies", title: "系统状态" }
 };
 
-const HEALTH_ORDER = [
-    "fastapi",
-    "postgresql",
-    "minio",
-    "redis",
-    "elasticsearch",
-    "celery",
-    "embedding",
-    "llm",
-    "rerank"
+const HEALTH_GROUPS = [
+    {
+        id: "core",
+        title: "核心服务",
+        description: "决定已有知识库的检索与问答是否可用。",
+        keys: ["fastapi", "elasticsearch", "redis", "postgresql"]
+    },
+    {
+        id: "document_processing",
+        title: "文档解析服务",
+        description: "影响新文档上传、对象读取和异步解析。",
+        keys: ["minio", "celery"]
+    },
+    {
+        id: "ai",
+        title: "AI 能力",
+        description: "Embedding、LLM 与可选的检索重排能力。",
+        keys: ["embedding", "llm", "rerank"]
+    }
 ];
+
+const HEALTH_ORDER = HEALTH_GROUPS.flatMap((group) => group.keys);
 
 const SIDEBAR_HEALTH_ORDER = [
     "fastapi",
@@ -60,6 +71,7 @@ const elements = {
     dashboardRerankNode: $("dashboardRerankNode"),
     dashboardRerankStatus: $("dashboardRerankStatus"),
     dashboardSuccessCount: $("dashboardSuccessCount"),
+    defaultKnowledgeCard: $("defaultKnowledgeCard"),
     documentDetailContent: $("documentDetailContent"),
     documentResultCount: $("documentResultCount"),
     documentSearchInput: $("documentSearchInput"),
@@ -77,12 +89,19 @@ const elements = {
     evidenceToggle: $("evidenceToggle"),
     fileInput: $("fileInput"),
     globalEyebrow: $("globalEyebrow"),
-    globalStatusButton: $("globalStatusButton"),
-    globalStatusDot: $("globalStatusDot"),
-    globalStatusText: $("globalStatusText"),
+    coreStatusBadge: $("coreStatusBadge"),
+    uploadStatusBadge: $("uploadStatusBadge"),
+    rerankStatusBadge: $("rerankStatusBadge"),
     globalViewTitle: $("globalViewTitle"),
     headerEvidenceCount: $("headerEvidenceCount"),
     healthGrid: $("healthGrid"),
+    healthOverviewText: $("healthOverviewText"),
+    healthOverviewTitle: $("healthOverviewTitle"),
+    knowledgeBaseGrid: $("knowledgeBaseGrid"),
+    knowledgeEmptyState: $("knowledgeEmptyState"),
+    knowledgeSearchInput: $("knowledgeSearchInput"),
+    knowledgeStatusBadge: $("knowledgeStatusBadge"),
+    knowledgeUpdatedAt: $("knowledgeUpdatedAt"),
     mobileMenuButton: $("mobileMenuButton"),
     overallHealth: $("overallHealth"),
     pipelineTaskCount: $("pipelineTaskCount"),
@@ -97,12 +116,15 @@ const elements = {
     refreshHealthButton: $("refreshHealthButton"),
     refreshPipelineButton: $("refreshPipelineButton"),
     retrievalLatency: $("retrievalLatency"),
+    retrievalModeHint: $("retrievalModeHint"),
     retrievalQueryInput: $("retrievalQueryInput"),
     retrievalRerankInput: $("retrievalRerankInput"),
     retrievalRerankStatus: $("retrievalRerankStatus"),
     retrievalResults: $("retrievalResults"),
+    retrievalSettings: $("retrievalSettings"),
     retrievalTopKInput: $("retrievalTopKInput"),
     runRetrievalButton: $("runRetrievalButton"),
+    runtimePort: $("runtimePort"),
     selectedFileName: $("selectedFileName"),
     sidebarBackdrop: $("sidebarBackdrop"),
     sidebarHealthList: $("sidebarHealthList"),
@@ -112,6 +134,7 @@ const elements = {
     sidebarUploadButton: $("sidebarUploadButton"),
     toastRegion: $("toastRegion"),
     uploadButton: $("uploadButton"),
+    uploadDropCard: $("uploadDropCard"),
     uploadResult: $("uploadResult")
 };
 
@@ -129,7 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function bindNavigation() {
-    document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
+    document.querySelectorAll(".nav-item[data-view], .rail-item[data-view], .rail-brand[data-view]").forEach((button) => {
         button.addEventListener("click", () => setView(button.dataset.view));
     });
 
@@ -144,8 +167,6 @@ function bindNavigation() {
     elements.contextBackdrop.addEventListener("click", closeContextPanel);
     elements.evidenceCloseButton.addEventListener("click", closeContextPanel);
     elements.evidenceToggle.addEventListener("click", toggleContextPanel);
-    elements.globalStatusButton.addEventListener("click", () => setView("health"));
-
     document.addEventListener("keydown", (event) => {
         if (event.key === "Escape") {
             closeSidebar();
@@ -161,9 +182,9 @@ function bindActions() {
     });
 
     const openDocumentUpload = () => {
-        setView("documents");
+        setView("pipeline");
         window.setTimeout(() => {
-            fileSelectionOrigin = "documents";
+            fileSelectionOrigin = "pipeline";
             elements.fileInput.value = "";
             elements.fileInput.click();
         }, 0);
@@ -194,12 +215,39 @@ function bindActions() {
         elements.fileInput.click();
     });
     elements.chooseFileButton.addEventListener("click", () => {
-        fileSelectionOrigin = "documents";
+        fileSelectionOrigin = "pipeline";
         elements.fileInput.value = "";
         elements.fileInput.click();
     });
     elements.fileInput.addEventListener("change", handleFileSelection);
     elements.uploadButton.addEventListener("click", uploadDocument);
+    elements.knowledgeSearchInput.addEventListener("input", renderKnowledgeSearch);
+    elements.defaultKnowledgeCard.addEventListener("click", () => setView("documents"));
+    elements.defaultKnowledgeCard.addEventListener("keydown", (event) => {
+        if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            setView("documents");
+        }
+    });
+    ["dragenter", "dragover"].forEach((eventName) => {
+        elements.uploadDropCard.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            elements.uploadDropCard.classList.add("drag-active");
+        });
+    });
+    ["dragleave", "drop"].forEach((eventName) => {
+        elements.uploadDropCard.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            elements.uploadDropCard.classList.remove("drag-active");
+        });
+    });
+    elements.uploadDropCard.addEventListener("drop", (event) => {
+        const files = event.dataTransfer?.files;
+        if (!files?.length) return;
+        elements.fileInput.files = files;
+        fileSelectionOrigin = "pipeline";
+        handleFileSelection();
+    });
 
     elements.refreshDocumentsButton.addEventListener("click", loadDocuments);
     elements.documentSearchInput.addEventListener("input", renderDocuments);
@@ -219,11 +267,12 @@ function bindActions() {
 
 function setView(viewName) {
     const meta = VIEW_META[viewName] || VIEW_META.dashboard;
+    elements.retrievalSettings.open = false;
 
     document.querySelectorAll(".app-view").forEach((view) => {
         view.classList.toggle("active", view.dataset.viewName === viewName);
     });
-    document.querySelectorAll(".nav-item[data-view]").forEach((button) => {
+    document.querySelectorAll(".nav-item[data-view], .rail-item[data-view], .rail-brand[data-view]").forEach((button) => {
         const active = button.dataset.view === viewName;
         button.classList.toggle("active", active);
         if (active) {
@@ -313,11 +362,19 @@ function renderDocuments() {
 
     if (documents.length === 0) {
         elements.documentsList.appendChild(
-            createEmptyPanel(
-                latestDocuments.length === 0
-                    ? "暂无文档。上传 PDF 或 TXT 后，文档会显示在这里。"
-                    : "没有符合当前搜索和筛选条件的文档。"
-            )
+            latestDocuments.length === 0
+                ? createActionEmptyPanel(
+                    "icon-file",
+                    "知识库还没有文档",
+                    "上传 PDF 或 TXT 后，文档状态和 chunk 数量会显示在这里。",
+                    "导入第一份文档",
+                    "pipeline"
+                )
+                : createCenteredEmpty(
+                    "icon-search",
+                    "没有匹配的文档",
+                    "请调整搜索关键词或解析状态筛选。"
+                )
         );
         return;
     }
@@ -388,6 +445,34 @@ function renderDashboardDocuments() {
     elements.dashboardChunkCount.textContent = knownChunks.length
         ? String(knownChunks.reduce((sum, value) => sum + value, 0))
         : "暂无统计";
+    elements.knowledgeUpdatedAt.textContent = latestDocuments[0]?.createdAt
+        ? `最近更新：${formatDate(latestDocuments[0].createdAt)}`
+        : "尚未导入文档";
+    const successCount = latestDocuments.filter((doc) => doc.status === "SUCCESS").length;
+    const hasFailed = latestDocuments.some((doc) => doc.status === "FAILED");
+    const hasProcessing = latestDocuments.some(
+        (doc) => doc.status === "PENDING" || doc.status === "PARSING"
+    );
+    if (latestDocuments.length === 0) {
+        elements.knowledgeStatusBadge.className = "status-badge neutral";
+        elements.knowledgeStatusBadge.textContent = "待导入";
+    } else if (hasFailed) {
+        elements.knowledgeStatusBadge.className = "status-badge warning";
+        elements.knowledgeStatusBadge.textContent = "部分异常";
+    } else if (hasProcessing) {
+        elements.knowledgeStatusBadge.className = "status-badge info";
+        elements.knowledgeStatusBadge.textContent = "解析中";
+    } else if (successCount > 0) {
+        elements.knowledgeStatusBadge.className = "status-badge success";
+        elements.knowledgeStatusBadge.textContent = "可检索";
+    }
+    elements.defaultKnowledgeCard.dataset.searchable = [
+        "默认知识库",
+        "企业知识库",
+        "RAG",
+        ...latestDocuments.map((doc) => doc.fileName)
+    ].join(" ").toLowerCase();
+    renderKnowledgeSearch();
 
     elements.dashboardRecentDocuments.innerHTML = "";
     const recent = latestDocuments.slice(0, 5);
@@ -414,6 +499,26 @@ function renderDashboardDocuments() {
         );
         elements.dashboardRecentDocuments.appendChild(row);
     });
+}
+
+function renderKnowledgeSearch() {
+    const keyword = elements.knowledgeSearchInput.value.trim().toLowerCase();
+    const cards = Array.from(
+        elements.knowledgeBaseGrid.querySelectorAll("[data-searchable]")
+    );
+    let visibleCount = 0;
+
+    cards.forEach((card) => {
+        const searchable = String(card.dataset.searchable || "").toLowerCase();
+        const visible = !keyword || searchable.includes(keyword);
+        card.classList.toggle("hidden", !visible);
+        if (visible) visibleCount += 1;
+    });
+
+    elements.knowledgeEmptyState.classList.toggle(
+        "hidden",
+        visibleCount > 0 || !keyword
+    );
 }
 
 function selectDocument(docId) {
@@ -454,14 +559,21 @@ function renderDocumentDetail() {
         list.appendChild(row);
     });
 
-    elements.documentDetailContent.append(
-        list,
+    const guidance = document.createElement("div");
+    guidance.className = "detail-guidance";
+    guidance.append(
         createTextElement(
-            "div",
-            "detail-note",
-            "原文读取接口当前未开放；此处只展示后端真实返回的文档元数据。"
-        )
+            "p",
+            "",
+            "当前展示文档元数据和解析状态。你可以在检索调试或 RAG 问答引用中查看命中的文档片段。"
+        ),
+        createButton("查看检索片段", "secondary-button detail-action", () => {
+            setView("retrieval");
+            window.setTimeout(() => elements.retrievalQueryInput.focus(), 0);
+        })
     );
+
+    elements.documentDetailContent.append(list, guidance);
 }
 
 function handleFileSelection() {
@@ -516,7 +628,7 @@ function setUploadLoading(isLoading, fileName = "") {
     elements.uploadButton.disabled = isLoading;
     elements.chooseFileButton.disabled = isLoading;
     elements.attachmentButton.disabled = isLoading;
-    elements.uploadButton.textContent = isLoading ? "上传中..." : "上传文档";
+    elements.uploadButton.textContent = isLoading ? "上传中..." : "上传并解析";
 
     if (isLoading) {
         elements.uploadResult.textContent = `正在上传 ${fileName}...`;
@@ -681,7 +793,8 @@ async function askQuestion() {
         updateAssistantState(assistant, response);
         answerEvidenceById.set(assistant.answerId, {
             answerType: response.answerType,
-            sources: response.sources
+            sources: response.sources,
+            rawCitationCount: response.rawCitationCount
         });
         selectAssistantAnswer(assistant.answerId);
         elements.composerHint.textContent = getComposerResultText(response);
@@ -695,7 +808,8 @@ async function askQuestion() {
         assistant.latency.textContent = `${Math.round(performance.now() - startedAt)} ms`;
         answerEvidenceById.set(assistant.answerId, {
             answerType: "error",
-            sources: []
+            sources: [],
+            rawCitationCount: 0
         });
         selectAssistantAnswer(assistant.answerId);
         elements.composerHint.textContent = "问答失败，请检查系统状态";
@@ -756,7 +870,8 @@ function createAssistantMessage() {
     elements.chatMessages.appendChild(wrapper);
     answerEvidenceById.set(answerId, {
         answerType: "loading",
-        sources: []
+        sources: [],
+        rawCitationCount: 0
     });
     selectAssistantAnswer(answerId);
     return { answerId, card, answer, state, citation, latency };
@@ -774,18 +889,16 @@ function selectAssistantAnswer(answerId) {
         card.classList.toggle("selected", selected);
         card.setAttribute("aria-pressed", String(selected));
     });
-    renderEvidence(evidence.sources, evidence.answerType);
+    renderEvidence(evidence.sources, evidence.answerType, evidence.rawCitationCount);
 }
 
 function normalizeAnswerResponse(data) {
     const answer = String(data?.answer ?? data?.result ?? "后端没有返回可展示的回答。");
-    const rawSources = Array.isArray(data?.citations)
-        ? data.citations
-        : Array.isArray(data?.sources)
-            ? data.sources
-            : Array.isArray(data?.chunks)
-                ? data.chunks
-                : [];
+    const sourceCollections = [data?.citations, data?.sources, data?.chunks]
+        .filter(Array.isArray);
+    const rawSources = sourceCollections.find((items) => items.length > 0)
+        || sourceCollections[0]
+        || [];
     let answerType = String(data?.answer_type || "").toLowerCase();
     const usedRetrieval = typeof data?.used_retrieval === "boolean"
         ? data.used_retrieval
@@ -805,7 +918,13 @@ function normalizeAnswerResponse(data) {
     const sources = answerType === "grounded"
         ? rawSources.map(normalizeSource).filter(isUsefulSource)
         : [];
-    return { answer, answerType, usedRetrieval, sources };
+    return {
+        answer,
+        answerType,
+        usedRetrieval,
+        sources,
+        rawCitationCount: answerType === "grounded" ? rawSources.length : 0
+    };
 }
 
 function updateAssistantState(message, response) {
@@ -823,9 +942,10 @@ function updateAssistantState(message, response) {
     }
 }
 
-function renderEvidence(sources, answerType) {
+function renderEvidence(sources, answerType, rawCitationCount = 0) {
     const items = normalizeArray(sources).map(normalizeSource).filter(isUsefulSource);
     const state = getAnswerState(answerType);
+    const missingPreviewCount = items.filter((source) => !isMeaningful(source.chunkText)).length;
 
     elements.evidenceStatus.className = `answer-state ${state.className}`;
     elements.evidenceStatus.textContent = state.label;
@@ -834,17 +954,31 @@ function renderEvidence(sources, answerType) {
     elements.evidenceContent.innerHTML = "";
 
     if (items.length === 0) {
-        const copy = {
+        const copy = rawCitationCount > 0
+            ? ["引用内容暂不可预览", "已返回引用，但片段预览字段缺失。"]
+            : ({
             loading: ["正在生成回答", "回答完成后将同步显示当前回答的引用证据。"],
-            chitchat: ["未触发知识库检索", "这是普通助手回复，未触发知识库检索。"],
-            unanswerable: ["没有可展示的证据", "未找到达到引用阈值的证据，因此未展示来源。"],
+            chitchat: ["未使用知识库检索", "当前回答未使用知识库检索。"],
+            unanswerable: ["未展示来源", "未找到足够知识库依据，因此未展示来源。"],
             error: ["证据获取失败", "本次请求未完成，没有生成可核对的引用。"],
             neutral: ["尚无引用证据", "当前回答没有使用知识库引用。"]
-        }[answerType] || ["当前回答没有引用", "当前回答没有使用知识库引用。"];
+        }[answerType] || ["当前回答没有引用", "当前回答没有使用知识库引用。"]);
         elements.evidenceContent.appendChild(
             createCenteredEmpty("icon-panel", copy[0], copy[1])
         );
         return;
+    }
+
+    if (missingPreviewCount > 0) {
+        const notice = createTextElement(
+            "div",
+            "evidence-preview-notice",
+            missingPreviewCount === items.length
+                ? "已返回引用，但片段预览字段缺失。"
+                : `${missingPreviewCount} 条引用未返回片段预览，其余引用可正常查看。`
+        );
+        notice.setAttribute("role", "status");
+        elements.evidenceContent.appendChild(notice);
     }
 
     const list = document.createElement("div");
@@ -885,6 +1019,7 @@ function createSourceCard(source, index) {
     appendMetaIfPresent(meta, "doc_id", source.docId);
     appendMetaIfPresent(meta, "chunk_id", source.chunkId);
     appendMetaIfPresent(meta, "page", source.pageNumber);
+    appendMetaIfPresent(meta, "source_type", source.sourceType);
     const scores = document.createElement("div");
     scores.className = "score-strip";
     scoreEntries.forEach(([label, value]) => {
@@ -898,7 +1033,7 @@ function createSourceCard(source, index) {
         createTextElement(
             "div",
             "source-text",
-            truncate(source.chunkText, 1600) || "暂无片段预览"
+            truncate(source.chunkText, 1600) || "已返回引用，但片段预览字段缺失。"
         )
     );
     details.append(summary, body);
@@ -955,7 +1090,10 @@ async function runRetrievalTest() {
         createEmptyPanel("正在执行 Embedding 与 Hybrid 检索...")
     );
     elements.retrievalLatency.textContent = "运行中";
-    elements.retrievalRerankStatus.textContent = useRerank ? "尝试 Rerank" : "Rerank 未启用";
+    elements.retrievalRerankStatus.textContent = useRerank ? "尝试 Rerank" : "使用基础检索";
+    elements.retrievalModeHint.textContent = useRerank
+        ? "已请求二次重排，完成后将展示 Baseline Rank 与 Rerank Rank 对比。"
+        : "当前使用基础检索，未启用二次重排。";
 
     try {
         const params = new URLSearchParams({
@@ -975,6 +1113,7 @@ async function runRetrievalTest() {
         );
         elements.retrievalLatency.textContent = "运行失败";
         elements.retrievalRerankStatus.textContent = "状态未知";
+        elements.retrievalModeHint.textContent = "检索状态暂不可用，请检查核心检索服务后重试。";
         showError(`检索测试失败：${getFriendlyError(error)}`);
     } finally {
         elements.runRetrievalButton.disabled = false;
@@ -1004,6 +1143,11 @@ function renderRetrievalResults(data) {
         data?.rerank_message,
         data?.rerank_error
     ].filter(isMeaningful).join(" ");
+    elements.retrievalModeHint.textContent = rerankStatus === "enabled"
+        ? "已启用二次重排，可对照 Baseline Rank 与 Rerank Rank。"
+        : rerankStatus === "fallback"
+            ? "二次重排调用失败，当前展示基础检索结果。"
+            : "当前使用基础检索，未启用二次重排。";
     elements.retrievalResults.innerHTML = "";
     setDashboardRerankState(rerankStatus, rerankModel);
 
@@ -1165,17 +1309,11 @@ function renderDashboardEvaluation(data) {
         elements.dashboardEvalMetrics.appendChild(item);
     });
 
-    const answerCaseCount = Number(answer.answer_case_count);
-    const answerFailures = new Set(
-        normalizeArray(answer.failures)
-            .map((failure) => failure.case_id)
-            .filter(isMeaningful)
-    ).size;
-    elements.dashboardEvalRate.textContent = Number.isFinite(answerCaseCount) && answerCaseCount > 0
-        ? formatPercent(Math.max(0, answerCaseCount - answerFailures) / answerCaseCount)
+    elements.dashboardEvalRate.textContent = data?.available
+        ? "结果仅供参考"
         : "暂无评测数据";
     elements.dashboardEvalSource.textContent = data?.available
-        ? "基于最近一次 eval_report.md 统计"
+        ? "当前评测集与现有知识库内容可能不匹配"
         : "暂无评测数据";
     elements.dashboardEvalFallback.classList.toggle("hidden", Boolean(data?.available));
 }
@@ -1252,11 +1390,14 @@ async function loadLegacySystemStatus() {
         }
     });
 
-    const runtime = HEALTH_ORDER.map((key) => components[key].status);
+    const serviceStatus = deriveServiceStatus(components);
     return {
-        status: runtime.every(
-            (status) => ["ok", "configured", "disabled"].includes(status)
-        ) ? "ok" : "degraded",
+        status: serviceStatus.core === "ok" && serviceStatus.upload === "ok"
+            ? "ok"
+            : serviceStatus.core === "ok"
+            ? "degraded"
+            : "error",
+        service_status: serviceStatus,
         components,
         retrieval: {}
     };
@@ -1268,43 +1409,165 @@ function setHealthLoading(isLoading) {
     if (isLoading) {
         elements.overallHealth.className = "status-badge neutral";
         elements.overallHealth.textContent = "检查中";
+        elements.healthOverviewTitle.textContent = "正在检查运行状态";
+        elements.healthOverviewText.textContent = "核心检索、上传解析和可选检索增强将分别判断。";
+        setRuntimeBadge(elements.coreStatusBadge, "核心检索：检查中", "neutral", "unknown");
+        setRuntimeBadge(elements.uploadStatusBadge, "上传解析：检查中", "neutral", "unknown");
+        setRuntimeBadge(elements.rerankStatusBadge, "检索模式：读取中", "neutral", "disabled");
+        elements.sidebarOverallDot.className = "status-dot unknown";
+        elements.sidebarOverallText.textContent = "系统检查中";
     }
 }
 
 function renderSystemStatus(data) {
     const components = data?.components || {};
-    const overall = String(data?.status || "unknown").toLowerCase();
+    const serviceStatus = {
+        ...deriveServiceStatus(components),
+        ...(data?.service_status || {})
+    };
     elements.healthGrid.innerHTML = "";
 
-    HEALTH_ORDER.forEach((key) => {
-        const component = findComponent(components, key);
-        const card = document.createElement("article");
-        card.className = "health-card";
-        card.append(
-            createTextElement("h3", "", component.name || getComponentName(key)),
-            createStatusBadge(
-                getDependencyStatusText(component.status),
-                getHealthStatusClass(component.status)
-            ),
-            createTextElement("p", "", component.message || "当前没有可用状态")
+    HEALTH_GROUPS.forEach((group) => {
+        const section = document.createElement("section");
+        section.className = "health-group";
+        const heading = document.createElement("div");
+        heading.className = "health-group-heading";
+        heading.append(
+            createTextElement("h3", "", group.title),
+            createTextElement("p", "", group.description)
         );
-        if (isMeaningful(component.model)) {
-            card.appendChild(
-                createTextElement("div", "health-model", `model: ${component.model}`)
+
+        const grid = document.createElement("div");
+        grid.className = "health-group-grid";
+        group.keys.forEach((key) => {
+            const component = findComponent(components, key);
+            const card = document.createElement("article");
+            card.className = `health-card ${getHealthStatusClass(component.status)}`;
+            card.append(
+                createTextElement("h4", "", component.name || getComponentName(key)),
+                createStatusBadge(
+                    getComponentStatusText(key, component.status),
+                    getHealthStatusClass(component.status)
+                ),
+                createTextElement("p", "", component.message || "当前没有可用状态")
             );
-        }
-        elements.healthGrid.appendChild(card);
+            if (isMeaningful(component.model)) {
+                card.appendChild(
+                    createTextElement("div", "health-model", `model: ${component.model}`)
+                );
+            }
+            grid.appendChild(card);
+        });
+
+        section.append(heading, grid);
+        elements.healthGrid.appendChild(section);
     });
 
-    elements.overallHealth.className = `status-badge ${getHealthStatusClass(overall)}`;
-    elements.overallHealth.textContent = getOverallHealthText(overall);
-    elements.globalStatusDot.className = `status-dot ${getHealthDotClass(overall)}`;
-    elements.globalStatusText.textContent = `系统状态${getOverallHealthText(overall)}`;
-    elements.sidebarOverallDot.className = `status-dot ${getHealthDotClass(overall)}`;
-    elements.sidebarOverallText.textContent = `系统${getOverallHealthText(overall)}`;
+    renderServiceSummary(serviceStatus);
+    elements.runtimePort.textContent = window.location.port || data?.api_port || "18000";
 
     renderSidebarHealth(components, data?.api_port);
     renderRetrievalConfiguration(data?.retrieval || {});
+}
+
+function deriveServiceStatus(components) {
+    const coreKeys = ["fastapi", "elasticsearch", "redis", "postgresql"];
+    const coreOk = coreKeys.every((key) => {
+        const status = String(findComponent(components, key).status || "").toLowerCase();
+        return ["ok", "success", "configured"].includes(status);
+    });
+    const minioStatus = String(findComponent(components, "minio").status || "").toLowerCase();
+    const celeryStatus = String(findComponent(components, "celery").status || "").toLowerCase();
+    const rerankStatus = String(findComponent(components, "rerank").status || "optional").toLowerCase();
+    let upload = "ok";
+
+    if (["error", "failed", "fail"].includes(minioStatus)) {
+        upload = "error";
+    } else if (["error", "failed", "fail"].includes(celeryStatus)) {
+        upload = "error";
+    } else if (
+        ["unknown", "checking", ""].includes(minioStatus)
+        || ["unknown", "checking", ""].includes(celeryStatus)
+    ) {
+        upload = "unknown";
+    }
+
+    return {
+        core: coreOk ? "ok" : "error",
+        upload,
+        rerank: rerankStatus
+    };
+}
+
+function renderServiceSummary(serviceStatus) {
+    const coreOk = serviceStatus.core === "ok";
+    const uploadStatus = String(serviceStatus.upload || "unknown").toLowerCase();
+    const rerankStatus = String(serviceStatus.rerank || "optional").toLowerCase();
+
+    setRuntimeBadge(
+        elements.coreStatusBadge,
+        coreOk ? "核心检索：正常" : "核心检索：异常",
+        coreOk ? "success" : "danger"
+    );
+
+    if (uploadStatus === "ok") {
+        setRuntimeBadge(elements.uploadStatusBadge, "上传解析：正常", "success");
+    } else if (uploadStatus === "unknown") {
+        setRuntimeBadge(elements.uploadStatusBadge, "上传解析：未检测", "warning");
+    } else {
+        setRuntimeBadge(elements.uploadStatusBadge, "上传解析：异常", "danger");
+    }
+
+    if (["optional", "disabled"].includes(rerankStatus)) {
+        setRuntimeBadge(elements.rerankStatusBadge, "检索模式：基础检索", "neutral", "disabled");
+    } else if (["ok", "success", "configured", "enabled"].includes(rerankStatus)) {
+        setRuntimeBadge(elements.rerankStatusBadge, "检索模式：重排检索", "success");
+    } else if (["fallback", "warning", "degraded"].includes(rerankStatus)) {
+        setRuntimeBadge(elements.rerankStatusBadge, "检索模式：基础检索", "warning");
+    } else {
+        setRuntimeBadge(elements.rerankStatusBadge, "检索模式：配置异常", "danger");
+    }
+
+    if (!coreOk) {
+        elements.overallHealth.className = "status-badge danger";
+        elements.overallHealth.textContent = "核心服务异常";
+        elements.healthOverviewTitle.textContent = "核心检索服务异常";
+        elements.healthOverviewText.textContent = "请优先检查 FastAPI、Elasticsearch、PostgreSQL 与 Redis。";
+        elements.sidebarOverallDot.className = "status-dot error";
+        elements.sidebarOverallText.textContent = "核心检索异常";
+    } else if (uploadStatus === "error") {
+        elements.overallHealth.className = "status-badge warning";
+        elements.overallHealth.textContent = "上传解析服务异常";
+        elements.healthOverviewTitle.textContent = "核心服务正常";
+        elements.healthOverviewText.textContent = "已有知识库问答可用；新文档上传或解析当前可能受影响。";
+        elements.sidebarOverallDot.className = "status-dot warning";
+        elements.sidebarOverallText.textContent = "上传解析异常";
+    } else if (uploadStatus === "unknown") {
+        elements.overallHealth.className = "status-badge warning";
+        elements.overallHealth.textContent = "解析 Worker 未检测";
+        elements.healthOverviewTitle.textContent = "核心服务正常";
+        elements.healthOverviewText.textContent = "已有知识库问答可用；解析 Worker 当前未检测。";
+        elements.sidebarOverallDot.className = "status-dot warning";
+        elements.sidebarOverallText.textContent = "解析 Worker 未检测";
+    } else {
+        elements.overallHealth.className = "status-badge success";
+        elements.overallHealth.textContent = "核心服务正常";
+        elements.healthOverviewTitle.textContent = "核心服务正常";
+        elements.healthOverviewText.textContent = "检索问答与上传解析服务当前可用。";
+        elements.sidebarOverallDot.className = "status-dot ok";
+        elements.sidebarOverallText.textContent = "核心服务正常";
+    }
+}
+
+function setRuntimeBadge(element, label, statusClass, dotClass = getHealthDotClass(statusClass)) {
+    if (!element) {
+        return;
+    }
+    element.className = `runtime-badge ${statusClass}`;
+    element.replaceChildren(
+        createTextElement("span", `status-dot ${dotClass}`, ""),
+        createTextElement("span", "", label)
+    );
 }
 
 function renderSidebarHealth(components, apiPort) {
@@ -1319,7 +1582,7 @@ function renderSidebarHealth(components, apiPort) {
         item.append(
             createTextElement("span", `status-dot ${getHealthDotClass(component.status)}`, ""),
             createTextElement("span", "", label),
-            createTextElement("b", "", getDependencyStatusText(component.status))
+            createTextElement("b", "", getComponentStatusText(key, component.status))
         );
         elements.sidebarHealthList.appendChild(item);
     });
@@ -1345,8 +1608,8 @@ function renderRetrievalConfiguration(config) {
     elements.playgroundRerank.textContent = config.rerank_apply_to_ask
         ? `DashScope ${rerankModel}`
         : config.rerank_enabled
-        ? `${rerankModel}（问答未启用）`
-        : "未启用";
+        ? `${rerankModel}（调试页可用）`
+        : "基础检索";
     const runtimeStatus = String(config.rerank_runtime_status || "").toLowerCase();
     setDashboardRerankState(
         ["enabled", "fallback"].includes(runtimeStatus)
@@ -1372,7 +1635,7 @@ function setDashboardRerankState(status, model) {
         elements.dashboardRerankStatus.textContent = "调用失败，已回退";
     } else {
         elements.dashboardRerankNode.classList.add("disabled");
-        elements.dashboardRerankStatus.textContent = "未启用";
+        elements.dashboardRerankStatus.textContent = "可选功能 · 未开启";
     }
 }
 
@@ -1479,6 +1742,7 @@ function normalizeSource(source) {
         ? item.metadata
         : {};
     const docId = firstMeaningful(
+        item.docId,
         item.doc_id,
         item.document_id,
         item.source_id,
@@ -1487,44 +1751,56 @@ function normalizeSource(source) {
         metadata.document_id
     );
     const chunkId = firstMeaningful(
-        item.chunk_id,
         item.chunkId,
+        item.chunk_id,
         metadata.chunk_id
     );
     const explicitName = normalizeSourceName(firstMeaningful(
+        item.fileName,
         item.document_name,
         item.filename,
         item.file_name,
+        item.title,
         item.doc_name,
         item.source_name,
         metadata.filename,
         metadata.document_name,
-        metadata.file_name
+        metadata.file_name,
+        metadata.title
     ));
     return {
         docId,
         fileName: explicitName || buildSourceFallback(docId, chunkId),
         chunkId,
         pageNumber: firstMeaningful(
+            item.pageNumber,
             item.page_number,
             item.page,
-            item.pageNumber,
             metadata.page_number,
             metadata.page
         ),
         chunkText: String(firstMeaningful(
-            item.preview,
+            item.chunkText,
             item.text_preview,
-            item.content,
+            item.snippet,
             item.chunk_text,
+            item.content,
             item.text,
-            metadata.preview,
             metadata.text_preview,
-            metadata.content,
+            metadata.snippet,
+            metadata.text,
             metadata.chunk_text,
-            metadata.text
+            metadata.content,
+            item.preview,
+            metadata.preview
         ) ?? ""),
-        score: firstMeaningful(item.score, item._score, item.similarity),
+        sourceType: firstMeaningful(
+            item.sourceType,
+            item.source_type,
+            metadata.source_type,
+            metadata.sourceType
+        ),
+        score: firstMeaningful(item.score, item._score, item.similarity, metadata.score),
         hybridScore: firstMeaningful(item.hybrid_score, item.hybridScore),
         vectorScore: firstMeaningful(item.vector_score, item.vectorScore),
         keywordScore: firstMeaningful(item.keyword_score, item.keywordScore),
@@ -1573,7 +1849,9 @@ function isUsefulSource(source) {
         source.fileName !== "未知来源" ? source.fileName : null,
         source.chunkId,
         source.pageNumber,
-        source.chunkText
+        source.chunkText,
+        source.sourceType,
+        source.score
     ].some(isMeaningful);
 }
 
@@ -1612,8 +1890,24 @@ function createCenteredEmpty(iconId, title, text) {
     return empty;
 }
 
+function createActionEmptyPanel(iconId, title, text, buttonText, viewName) {
+    const empty = createCenteredEmpty(iconId, title, text);
+    const action = createButton(
+        buttonText,
+        "accent-button",
+        () => setView(viewName)
+    );
+    empty.appendChild(action);
+    return empty;
+}
+
 function createEmptyPanel(text) {
-    return createTextElement("div", "empty-panel", text);
+    const loading = String(text).startsWith("正在");
+    return createTextElement(
+        "div",
+        loading ? "empty-panel loading-state" : "empty-panel",
+        text
+    );
 }
 
 function createTextElement(tagName, className, text) {
@@ -1698,7 +1992,7 @@ function getComponentName(key) {
         minio: "MinIO",
         redis: "Redis",
         elasticsearch: "Elasticsearch",
-        celery: "Celery Worker",
+        celery: "解析 Worker",
         embedding: "Embedding Model",
         llm: "LLM",
         rerank: "Rerank Model"
@@ -1744,7 +2038,7 @@ function getHealthStatusClass(status) {
     if (["ok", "success", "configured"].includes(value)) return "success";
     if (["error", "failed", "fail"].includes(value)) return "danger";
     if (["degraded", "warning"].includes(value)) return "warning";
-    if (value === "disabled") return "neutral";
+    if (["disabled", "optional"].includes(value)) return "neutral";
     return "neutral";
 }
 
@@ -1753,7 +2047,7 @@ function getHealthDotClass(status) {
     if (["ok", "success", "configured"].includes(value)) return "ok";
     if (["error", "failed", "fail"].includes(value)) return "error";
     if (["degraded", "warning"].includes(value)) return "warning";
-    if (value === "disabled") return "disabled";
+    if (["disabled", "optional"].includes(value)) return "disabled";
     return "unknown";
 }
 
@@ -1761,11 +2055,26 @@ function getDependencyStatusText(status) {
     const value = String(status || "").toLowerCase();
     if (["ok", "success"].includes(value)) return "正常";
     if (value === "configured") return "已配置";
-    if (value === "disabled") return "未启用";
+    if (value === "disabled") return "未开启";
+    if (value === "optional") return "可选功能";
     if (["error", "failed", "fail"].includes(value)) return "异常";
     if (["degraded", "warning"].includes(value)) return "部分异常";
     if (value === "checking") return "检查中";
     return "未知";
+}
+
+function getComponentStatusText(key, status) {
+    const value = String(status || "").toLowerCase();
+    if (key === "rerank" && ["optional", "disabled"].includes(value)) {
+        return "可选功能";
+    }
+    if (key === "celery" && ["unknown", "checking", ""].includes(value)) {
+        return "未检测";
+    }
+    if (key === "minio" && ["error", "failed", "fail"].includes(value)) {
+        return "连接失败";
+    }
+    return getDependencyStatusText(value);
 }
 
 function getOverallHealthText(status) {
@@ -1779,7 +2088,7 @@ function getOverallHealthText(status) {
 function getRerankStatusText(status) {
     const value = String(status || "").toLowerCase();
     if (value === "enabled") return "已启用";
-    if (value === "disabled") return "未启用";
+    if (["disabled", "optional"].includes(value)) return "基础检索";
     if (value === "fallback") return "调用失败，已回退";
     if (value === "unavailable") return "不可用";
     if (value === "failed") return "执行失败";
