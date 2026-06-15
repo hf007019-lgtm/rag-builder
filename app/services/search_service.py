@@ -150,11 +150,13 @@ def normalize_source(source: dict) -> dict:
         source.get("document_name")
         or source.get("filename")
         or source.get("file_name")
+        or source.get("title")
         or source.get("doc_name")
         or source.get("source_name")
         or metadata.get("filename")
         or metadata.get("document_name")
         or metadata.get("file_name")
+        or metadata.get("title")
     )
     if str(file_name or "").strip().lower() in {
         "",
@@ -188,15 +190,18 @@ def normalize_source(source: dict) -> dict:
             else metadata.get("page_number")
         ),
         "chunk_text": (
-            source.get("preview")
-            or source.get("text_preview")
-            or source.get("content")
+            source.get("text_preview")
+            or source.get("snippet")
             or source.get("chunk_text")
+            or source.get("content")
             or source.get("text")
-            or metadata.get("preview")
             or metadata.get("text_preview")
-            or metadata.get("content")
+            or metadata.get("snippet")
+            or metadata.get("text")
             or metadata.get("chunk_text")
+            or metadata.get("content")
+            or source.get("preview")
+            or metadata.get("preview")
             or ""
         ),
         "score": (
@@ -205,6 +210,12 @@ def normalize_source(source: dict) -> dict:
             else source.get("_score")
             if source.get("_score") is not None
             else source.get("similarity")
+        ),
+        "source_type": (
+            source.get("source_type")
+            or source.get("sourceType")
+            or metadata.get("source_type")
+            or metadata.get("sourceType")
         )
     }
 

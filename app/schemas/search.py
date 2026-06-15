@@ -38,6 +38,9 @@ class SourceChunk(BaseModel):
     # 检索得分
     score: Optional[float] = None
 
+    # 可选来源类型，例如 pdf、txt 或 retrieval
+    source_type: Optional[str] = None
+
 
 # 定义问答响应模型
 class AskResponse(BaseModel):
