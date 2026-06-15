@@ -313,7 +313,7 @@ expected_chunk_ids
 -> expected_doc_ids
 ```
 
-答案评测会检查来源命中、expected claims、不可回答问题的拒答行为，并用词面重叠启发式统计 `unsupported_claim_count`。当前接口没有标准 `citations` 字段，因此标准 citation coverage 按兼容约定显示为 `N/A`；脚本会额外输出 `sources` 兼容命中率。
+答案评测会检查来源命中、expected claims、不可回答问题的拒答行为，并用词面重叠启发式统计 `unsupported_claim_count`。当前接口优先评估标准 `citations` 字段，同时保留 `sources` 兼容覆盖统计。
 
 如果 ES 未启动、索引不存在或索引中没有 chunk，脚本不会崩溃，会在以下文件中记录“没有可评测数据”：
 

@@ -47,6 +47,8 @@
 
 - [ ] `POST /api/v1/search/ask` 能返回 `answer`。
 - [ ] `POST /api/v1/search/ask` 能返回 `sources`。
+- [ ] `POST /api/v1/search/ask` 能返回 `citations`。
+- [ ] 响应包含 `answer_type` 和 `used_retrieval`。
 - [ ] `sources` 包含 `doc_id`。
 - [ ] `sources` 包含 `file_name`。
 - [ ] `sources` 包含 `chunk_id`。
@@ -65,7 +67,8 @@
 ## 文档
 
 - [ ] README 能说明项目用途和启动方式。
-- [ ] `docs/api.md` 接口路径与代码一致。
-- [ ] `docs/architecture.md` 说明当前模块边界。
-- [ ] `docs/testing.md` 可以按步骤完成本地测试。
-- [ ] `docs/troubleshooting.md` 覆盖常见本地问题。
+- [ ] `docs/architecture/api_overview.md` 接口路径与代码一致。
+- [ ] `docs/architecture/project_architecture.md` 说明当前模块边界。
+- [ ] `docs/operations/testing.md` 可以按步骤完成本地测试。
+- [ ] `docs/operations/troubleshooting.md` 覆盖常见本地问题。
+- [ ] `docs/evaluation/rag_evaluation.md` 说明离线评测边界。
