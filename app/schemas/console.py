@@ -20,10 +20,16 @@ class SystemComponent(BaseModel):
     status: str
     message: str
     model: Optional[str] = None
+    category: Optional[str] = None
+    impact: Optional[str] = None
+    action: Optional[str] = None
+    endpoint: Optional[str] = None
+    optional: bool = False
 
 
 class SystemStatusResponse(BaseModel):
     status: str
+    service_status: Dict[str, str] = Field(default_factory=dict)
     components: Dict[str, SystemComponent]
     retrieval: Dict[str, Any]
     api_port: Optional[int] = None

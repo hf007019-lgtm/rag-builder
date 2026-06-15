@@ -116,13 +116,19 @@ def check_minio():
         )
 
     # 如果 MinIO 检查失败
-    except Exception as e:
-
-        # 返回失败结果
-        return build_error_result(
-            name="MinIO",
-            error=e
-        )
+    except Exception:
+        return {
+            "name": "MinIO",
+            "status": "error",
+            "message": (
+                "MinIO：连接失败\n"
+                "影响：可能无法上传新文档或读取对象存储文件。\n"
+                "建议：检查 Docker Desktop 是否启动、MinIO 容器是否运行、"
+                "MINIO_ENDPOINT 是否正确。\n"
+                f"当前端点：{settings.MINIO_ENDPOINT}"
+            ),
+            "endpoint": settings.MINIO_ENDPOINT
+        }
 
 
 # 检查 Redis 是否正常
