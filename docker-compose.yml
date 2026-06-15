@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:15-alpine
@@ -8,9 +6,9 @@ services:
     ports:
       - "15432:5432"
     environment:
-      - POSTGRES_USER=rag_admin
-      - POSTGRES_PASSWORD=rag_secure
-      - POSTGRES_DB=rag_db
+      - POSTGRES_USER=${POSTGRES_USER:-rag_admin}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-rag_secure}
+      - POSTGRES_DB=${POSTGRES_DB:-rag_db}
     volumes:
       - pg_data:/var/lib/postgresql/data
 
@@ -19,8 +17,8 @@ services:
     container_name: rag_minio
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: minio_admin
-      MINIO_ROOT_PASSWORD: minio_secure
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
     ports:
       - "19002:9000"
       - "19003:9001"
@@ -32,7 +30,7 @@ services:
     container_name: rag_redis
     restart: always
     ports:
-      - "16379:6379"  # 【重点】：左边改成 6380，避开你本地 Dify 占用的 6379
+      - "16379:6379"
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:8.11.1
@@ -56,11 +54,10 @@ services:
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     ports:
-      - "15601:5601"  # Kibana 的可视化后台端口
+      - "15601:5601"
     depends_on:
       - elasticsearch
 
-  # 记得在最下面的 volumes 里把 es_data 加上
 volumes:
   pg_data:
   minio_data:

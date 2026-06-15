@@ -13,6 +13,9 @@ from dotenv import load_dotenv
 import os
 
 
+from sqlalchemy.engine import make_url
+
+
 # 定义项目根目录
 # Path(__file__) 表示当前 check_env.py 文件
 # resolve() 表示转成绝对路径
@@ -64,6 +67,21 @@ def mask_secret(value: str) -> str:
     return value[:4] + "****" + value[-4:]
 
 
+def mask_config_value(key: str, value: str) -> str:
+    """按配置类型隐藏凭据，避免检查脚本把密码打印到终端。"""
+    if key == "DATABASE_URL":
+        try:
+            return make_url(value).render_as_string(hide_password=True)
+        except Exception:
+            return "<invalid database url>"
+
+    sensitive_markers = ("KEY", "SECRET", "PASSWORD", "TOKEN")
+    if any(marker in key for marker in sensitive_markers):
+        return mask_secret(value)
+
+    return value
+
+
 # 定义主检查函数
 def check_env():
 
@@ -110,17 +128,7 @@ def check_env():
         # 如果值存在
         else:
 
-            # 如果是敏感配置
-            if "KEY" in key or "SECRET" in key:
-
-                # 隐藏敏感信息后打印
-                display_value = mask_secret(value)
-
-            # 如果不是敏感配置
-            else:
-
-                # 直接打印配置值
-                display_value = value
+            display_value = mask_config_value(key, value)
 
             # 打印成功配置
             print(f"✅ {key} = {display_value}  # {description}")

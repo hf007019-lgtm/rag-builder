@@ -80,24 +80,24 @@ class Settings:
     )
 
     # MinIO 服务地址
-    # 本地默认使用 127.0.0.1:9002
+    # 本地默认使用 Docker Compose 暴露的 19002 端口
     MINIO_ENDPOINT: str = get_optional_env(
         "MINIO_ENDPOINT",
-        "127.0.0.1:9002"
+        "127.0.0.1:19002"
     )
 
     # MinIO 访问账号
     # 本地开发可以使用默认值，生产环境建议在 .env 中显式配置
     MINIO_ACCESS_KEY: str = get_optional_env(
         "MINIO_ACCESS_KEY",
-        "minio_admin"
+        "minioadmin"
     )
 
     # MinIO 访问密码
     # 本地开发可以使用默认值，生产环境建议在 .env 中显式配置
     MINIO_SECRET_KEY: str = get_optional_env(
         "MINIO_SECRET_KEY",
-        "minio_secure"
+        "minioadmin"
     )
 
     # MinIO 存储桶名称

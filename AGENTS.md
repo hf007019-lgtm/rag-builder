@@ -4,8 +4,8 @@
 
 本文件是 AI、Codex 和后续开发者进入 `rag_builder` 仓库后必须优先阅读的项目级规则。执行任何修改前，还应阅读：
 
-1. `project_overview.md`：项目全景、架构、接口和配置。
-2. `stage_summary_current.md`：当前阶段、已知问题和下一步建议。
+1. `docs/architecture/project_overview.md`：项目全景、架构、接口和配置。
+2. `docs/architecture/stage_summary_current.md`：当前阶段、已知问题和下一步建议。
 3. 与任务直接相关的代码及 `docs/` 下已有文档。
 
 项目根目录：
@@ -16,7 +16,7 @@ D:\PycharmProjects\rag_builder
 
 ## 2. 项目定位
 
-`rag_builder` 是一个轻量级企业知识库 RAG 后端系统，目标是提供一套本地可运行、适合简历展示、便于学习和继续扩展的 RAG 基础能力。
+`rag_builder` 是一个轻量级企业知识库 RAG 后端系统，目标是提供一套本地可运行、便于学习、验证和继续扩展的 RAG 工程能力。
 
 核心能力包括：
 
@@ -145,11 +145,10 @@ scripts/
   check_env.py            环境变量检查
   init_db.py              PostgreSQL 建表
 docs/
-  api.md                  接口说明
-  architecture.md         架构说明
-  testing.md              本地测试步骤
-  troubleshooting.md      常见问题
-  project_checklist.md    功能验收清单
+  architecture/           项目全景、架构、RAG 流水线和接口说明
+  operations/             本地启动、测试、排错和验收清单
+  evaluation/             RAG 离线评测说明
+  import_reports/         数据导入报告目录说明
 ```
 
 模块职责必须保持清晰：
@@ -335,14 +334,14 @@ feat: add document parsing status endpoint
 
 ## 23. 当前已知风险
 
-- `app/main.py` 重复注册健康检查路由，可能出现 Duplicate Operation ID。
 - `worker/celery_app.py` 硬编码 Redis 地址。
 - `worker/deepdoc/es_client.py` 硬编码 ES 地址、索引名和 1536 维 mapping。
-- `search_service.py` 在模块导入时初始化 ES 客户端，FastAPI 启动会依赖 ES 就绪。
 - MinIO 对象名直接使用原文件名，同名不同内容可能覆盖。
 - 上传在数据库提交后再投递 Celery；若投递失败，可能留下长期 `PENDING`。
 - 失败任务若已写入部分 chunk，retry 可能重复写入。
 - 删除流程对 MinIO/ES 的部分失败处理较宽松，可能形成残留数据。
+- 上传仍会一次性读取完整文件，尚未设置文件大小限制。
+- 仓库已有离线 RAG 评测，但尚无 pytest 自动化测试目录。
 
 修改相关代码时应优先解决对应风险，但不要在无关任务中扩大范围。
 
@@ -351,13 +350,11 @@ feat: add document parsing status endpoint
 建议按风险和价值排序：
 
 1. 统一 Redis、ES、MinIO 配置读取，移除硬编码。
-2. 修复健康路由重复注册和启动阶段强依赖 ES。
-3. 为 MinIO 引入唯一 `object_name`，完善同名文件策略。
-4. 完善投递失败补偿、任务超时、重试和幂等写入。
-5. 增加单元测试、接口测试和固定 RAG 评测集。
-6. 提升 PDF 解析稳定性，补充 OCR 和版面处理。
-7. 增强 chunk 元数据、引用来源和检索质量评估。
-8. 在现有混合检索上增加可配置权重和 rerank。
-9. 增加多轮对话、权限、多租户等可选能力。
-10. 通过 API 与 `exam_agent` 等调用方对接，但保持仓库边界。
-
+2. 为 MinIO 引入唯一 `object_name`，完善同名文件策略。
+3. 完善投递失败补偿、任务超时、重试和幂等写入。
+4. 增加单元测试、接口测试和稳定的端到端评测数据。
+5. 提升 PDF 解析稳定性，补充 OCR 和版面处理。
+6. 增强 chunk 元数据、引用来源和检索质量评估。
+7. 用固定评测集持续验证混合检索权重和 rerank 收益。
+8. 增加多轮对话、权限、多租户等可选能力。
+9. 通过 API 与 `exam_agent` 等调用方对接，但保持仓库边界。

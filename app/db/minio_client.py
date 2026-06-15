@@ -12,15 +12,15 @@ from app.core.config import settings
 minio_client = Minio(
 
     # MinIO 服务地址
-    # 例如：127.0.0.1:9002
+    # 例如：127.0.0.1:19002
     settings.MINIO_ENDPOINT,
 
     # MinIO 访问账号
-    # 例如：minio_admin
+    # 例如：minioadmin
     access_key=settings.MINIO_ACCESS_KEY,
 
     # MinIO 访问密码
-    # 例如：minio_secure
+    # 例如：minioadmin
     secret_key=settings.MINIO_SECRET_KEY,
 
     # secure=False 表示本地开发环境不用 HTTPS
