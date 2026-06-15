@@ -1,114 +1,173 @@
+<div align="center">
+
 # RAG Builder
 
-RAG Builder 是一个本地可运行的轻量级企业知识库 RAG 工程系统，支持文档上传、异步解析、Embedding、Elasticsearch 混合检索、DashScope LLM 问答、qwen3-rerank 重排、引用溯源、RAG 离线评测和 Web 控制台。
+**Local-first RAG infrastructure for document ingestion, hybrid retrieval, grounded answers, evaluation, and observability.**
 
-## 项目简介
+RAG Builder 是一个本地可运行的轻量级企业知识库 RAG 系统，支持文档上传、异步解析、向量检索、Rerank 重排、引用溯源、RAG 评测和 Web 控制台。
 
-项目使用 FastAPI 提供 API 和静态控制台，以 PostgreSQL 保存文档元数据与任务日志，以 MinIO 保存原始文件，以 Redis 和 Celery 执行异步解析，并将文本块和向量写入 Elasticsearch。问答链路只基于检索上下文生成答案，同时返回可追溯的 `citations` 与兼容字段 `sources`。
+[![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-Backend-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
+[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.11.1-005571?logo=elasticsearch&logoColor=white)](https://www.elastic.co/elasticsearch)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
+[![License](https://img.shields.io/badge/License-MIT-22C55E.svg)](LICENSE)
 
-本仓库聚焦可在本地理解、运行、调试和继续扩展的 RAG 后端工程，不包含调用方的岗位推荐、招考分析等业务逻辑。
+[Demo Preview](#demo-preview) · [Features](#features) · [Architecture](#architecture) · [Quick Start](#quick-start) · [Documentation](#documentation)
 
-## 核心能力
+</div>
 
-- PDF / TXT 文档上传、空文件校验和 SHA-256 内容查重
-- MinIO 原始文档对象存储
-- PostgreSQL 文档元数据、状态和任务日志
-- Redis + Celery 异步解析流水线
-- 文本解析、清洗和 Chunk 切分
-- DashScope OpenAI 兼容 Embedding
-- Elasticsearch 向量检索与关键词混合检索
-- DashScope LLM 知识库问答
-- 可选的 `qwen3-rerank` 语义重排
-- `citations` / `sources` 引用溯源
-- 检索、重排、回答、引用和拒答离线评测
-- 文档管理、检索调试、评测报告和系统状态 Web 控制台
+---
 
-## 技术栈
+## Demo Preview
 
-| 层次 | 技术 |
-|---|---|
-| Web API | FastAPI、Uvicorn、Pydantic |
-| 元数据 | PostgreSQL、SQLAlchemy |
-| 对象存储 | MinIO |
-| 异步任务 | Redis、Celery |
-| 检索 | Elasticsearch 8.11.1 |
-| 模型服务 | DashScope OpenAI 兼容接口、Qwen |
-| 重排 | qwen3-rerank |
-| 文档处理 | pypdf、PyMuPDF、langchain-text-splitters |
-| Web 控制台 | HTML、CSS、JavaScript |
-| 本地编排 | Docker Compose |
+> Screenshots and a demo video will be added after the first public demo recording.
 
-## 系统架构
+<!--
+Recommended media locations:
+- docs/assets/demo.gif
+- docs/assets/demo-cover.png
+- docs/assets/rag-builder-preview.png
+
+For a longer video, upload it to GitHub Releases, YouTube, or Bilibili,
+then replace this comment with a linked cover image.
+-->
+
+The demo will cover the complete local workflow:
+
+```text
+Upload document
+-> Async parsing and embedding
+-> Hybrid retrieval and optional rerank
+-> Grounded answer with citations
+-> Offline evaluation and system inspection
+```
+
+## Features
+
+- **Document ingestion** with PDF / TXT validation, SHA-256 deduplication, and MinIO object storage
+- **Async parsing pipeline** powered by Celery and Redis
+- **Metadata persistence** and task observability with PostgreSQL
+- **Text parsing and chunking** with source metadata and stable trace fields
+- **DashScope Embedding** through an OpenAI-compatible client
+- **Hybrid retrieval** combining Elasticsearch vector and keyword search
+- **Optional qwen3-rerank** for retrieval debugging and configurable answer reranking
+- **Grounded answer generation** with `citations` and backward-compatible `sources`
+- **Intent-aware responses** for grounded, unanswerable, and chitchat requests
+- **Retrieval debug console** for baseline / rerank comparison
+- **Offline RAG evaluation** for retrieval, answer quality, citations, and abstention
+- **FastGPT-style Web workspace** built with native HTML, CSS, and JavaScript
+- **Health and dependency dashboard** for infrastructure, Worker, and model configuration
+
+## Screenshots
+
+> Image placeholders are reserved. Add release screenshots to [`docs/assets/`](docs/assets/) before publishing.
+
+### Knowledge Workspace
+
+<!-- Add: docs/assets/workspace.png -->
+
+The overview for knowledge assets, document activity, evaluation summaries, and runtime status.
+
+### RAG Chat with Citations
+
+<!-- Add: docs/assets/rag-chat.png -->
+
+The answer workspace with grounded responses and source evidence.
+
+### Retrieval Debug
+
+<!-- Add: docs/assets/retrieval-debug.png -->
+
+Baseline hybrid retrieval and optional qwen3-rerank comparison.
+
+### Evaluation Report
+
+<!-- Add: docs/assets/evaluation-report.png -->
+
+Offline retrieval, answer, citation, and abstention metrics.
+
+### System Status
+
+<!-- Add: docs/assets/system-status.png -->
+
+Dependency health, Worker activity, and model configuration visibility.
+
+## Architecture
+
+RAG Builder separates request handling, asynchronous document processing, structured metadata, object storage, and retrieval data. Upload requests return after task dispatch instead of waiting for parsing and embedding to finish.
 
 ```mermaid
 flowchart TD
-    User["用户 / Web 控制台 / API 调用方"] --> API["FastAPI"]
-    API --> PG["PostgreSQL<br/>元数据与任务日志"]
-    API --> MinIO["MinIO<br/>原始文档"]
-    API --> Redis["Redis / Celery Broker"]
-    Redis --> Worker["Celery Worker<br/>解析、清洗、切块、Embedding"]
-    Worker --> MinIO
-    Worker --> ES["Elasticsearch<br/>Chunks 与 Vectors"]
-    API --> ES
-    API --> Embed["DashScope Embedding"]
-    API --> Rerank["qwen3-rerank<br/>可选"]
-    API --> LLM["DashScope LLM"]
+    User["User / Web Console"] --> API["FastAPI Backend"]
+    API --> PG[("PostgreSQL Metadata DB")]
+    API --> MinIO[("MinIO Object Storage")]
+    API --> Redis[("Redis Broker")]
+    Redis --> Worker["Celery Worker"]
+    Worker --> Parser["Document Parser / Cleaner / Chunker"]
+    Parser --> Embed["DashScope Embedding"]
+    Embed --> ES[("Elasticsearch Index")]
+    API --> Retriever["Hybrid Retriever"]
+    ES --> Retriever
+    Retriever --> Rerank["qwen3-rerank (Optional)"]
+    Rerank --> LLM["DashScope LLM"]
+    Retriever --> LLM
+    LLM --> Answer["Answer with Citations"]
+    Answer --> User
 ```
 
-文档状态按以下路径流转：
+Document lifecycle:
 
 ```text
 PENDING -> PARSING -> SUCCESS
                     -> FAILED
 ```
 
-上传接口只完成校验、存储、元数据写入和任务投递，不等待解析、Embedding 与 Elasticsearch 入库完成。
+Detailed design: [Project Architecture](docs/architecture/project_architecture.md) · [RAG Pipeline](docs/architecture/rag_pipeline.md)
 
-## 目录结构
+## Tech Stack
 
-```text
-app/                       FastAPI、服务层、模型、配置与静态控制台
-worker/                    Celery 任务、文档流水线、Embedding 与 ES
-scripts/                   环境检查和数据库初始化脚本
-evals/                     离线评测脚本、用例和最近一次评测结果
-docs/
-  architecture/            项目全景、架构、流水线和 API
-  operations/              启动、测试、排错和验收清单
-  evaluation/              RAG 评测说明
-  import_reports/          数据导入报告目录说明
-docker-compose.yml         PostgreSQL、MinIO、Redis、ES、Kibana
-.env.example               可公开的环境变量示例
-```
+| Layer | Technology | Responsibility |
+|---|---|---|
+| API | FastAPI, Uvicorn, Pydantic | HTTP APIs, validation, Web console entry |
+| Metadata | PostgreSQL, SQLAlchemy | Documents, statuses, and task logs |
+| Object Storage | MinIO | Original PDF / TXT files |
+| Async Processing | Redis, Celery | Task dispatch and document processing |
+| Retrieval | Elasticsearch 8.11.1 | Chunks, vectors, keyword and KNN search |
+| Models | DashScope, Qwen | Embedding, rerank, and answer generation |
+| Parsing | pypdf, PyMuPDF | PDF / TXT content extraction |
+| Chunking | langchain-text-splitters | Recursive text splitting |
+| Console | HTML, CSS, JavaScript | Local workspace and diagnostics |
+| Infrastructure | Docker Compose | Local service orchestration |
 
-## 本地启动
+## Quick Start
 
-### 1. 克隆并安装依赖
+### Prerequisites
+
+- Python 3.10+
+- Docker Desktop
+- A DashScope-compatible API key
+- Windows PowerShell
+
+### 1. Clone and install
 
 ```powershell
-git clone <your-repository-url>
-cd rag_builder
+git clone https://github.com/hf007019-lgtm/rag-builder.git
+cd rag-builder
 
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -r requirements.txt
 ```
 
-### 2. 创建本地配置
+### 2. Configure the environment
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-编辑 `.env`，至少把以下占位符替换为自己的 DashScope API Key：
+Update `.env` with your own API key. Never commit this file.
 
-```env
-LLM_API_KEY=your_dashscope_api_key
-DASHSCOPE_API_KEY=your_dashscope_api_key
-```
-
-`.env` 只用于本机，已被 `.gitignore` 忽略。
-
-### 3. 启动基础依赖
+### 3. Start local dependencies
 
 ```powershell
 docker compose up -d
@@ -116,77 +175,80 @@ python scripts/check_env.py
 python scripts/init_db.py
 ```
 
-### 4. 启动 FastAPI
+### 4. Start the API
 
 ```powershell
-uvicorn app.main:app --host 127.0.0.1 --port 18000
+uvicorn app.main:app --reload --host 127.0.0.1 --port 18000
 ```
 
-### 5. 启动 Celery Worker
+### 5. Start the Celery Worker
 
-Windows 下在另一个 PowerShell 窗口运行：
+Open another PowerShell window, activate the same virtual environment, then run:
 
 ```powershell
 python -m celery -A worker.celery_app.celery_app worker --loglevel=info --pool=solo
 ```
 
-Worker 对浏览已有数据不是必需的，但上传新文档并完成解析时必须启动。
-
-更完整的步骤见 [本地启动指南](docs/operations/local_start.md)。
-
-## 环境变量
-
-| 变量 | 作用 | 示例 |
-|---|---|---|
-| `DATABASE_URL` | PostgreSQL SQLAlchemy 连接地址 | `postgresql+psycopg2://...` |
-| `POSTGRES_PASSWORD` | Compose 初始化 PostgreSQL 的本地密码 | `rag_secure` |
-| `MINIO_ENDPOINT` | MinIO API 地址 | `127.0.0.1:19002` |
-| `MINIO_ACCESS_KEY` | MinIO 本地访问账号 | `minioadmin` |
-| `MINIO_SECRET_KEY` | MinIO 本地访问密码 | `minioadmin` |
-| `MINIO_BUCKET_NAME` | 原始文档 Bucket | `rag-docs` |
-| `REDIS_URL` | Celery Broker / Backend 地址 | `redis://127.0.0.1:16379/0` |
-| `ES_URL` | Elasticsearch 地址 | `http://127.0.0.1:9200` |
-| `ES_INDEX_NAME` | 文本块索引名 | `rag_chunks` |
-| `ES_VECTOR_DIMS` | Embedding 向量维度 | `1536` |
-| `LLM_BASE_URL` | OpenAI 兼容模型服务地址 | DashScope 兼容地址 |
-| `LLM_API_KEY` | Embedding / Chat API Key | 仅写入本地 `.env` |
-| `EMBEDDING_MODEL_NAME` | Embedding 模型 | `text-embedding-v2` |
-| `CHAT_MODEL_NAME` | Chat 模型 | `qwen-plus` |
-| `DASHSCOPE_API_KEY` | 可选的独立 rerank Key | 仅写入本地 `.env` |
-| `RERANK_ENABLED` | 默认是否启用重排 | `false` |
-| `RERANK_MODEL_NAME` | 重排模型 | `qwen3-rerank` |
-| `RERANK_APPLY_TO_ASK` | 是否应用到正式问答 | `false` |
-
-完整安全示例见 [.env.example](.env.example)。
-
-## Web 控制台
-
-FastAPI 启动后访问：
+Open the Web console:
 
 ```text
 http://127.0.0.1:18000
 ```
 
-控制台包括：
-
-- 全部知识库
-- 文档集合
-- 上传解析
-- 检索调试
-- RAG 问答
-- 评测报告
-- 系统状态
-- API 调试
-
-Swagger 地址：
+Swagger:
 
 ```text
 http://127.0.0.1:18000/docs
 ```
 
-## API 示例
+See [Local Start Guide](docs/operations/local_start.md) for the complete workflow.
 
-`POST /api/v1/search/ask`
+## Environment Variables
+
+Copy `.env.example` to `.env` and update the local values:
+
+| Variable | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL SQLAlchemy connection URL |
+| `POSTGRES_PASSWORD` | Local PostgreSQL initialization password |
+| `MINIO_ENDPOINT` | MinIO API endpoint |
+| `MINIO_ACCESS_KEY` | MinIO local access key |
+| `MINIO_SECRET_KEY` | MinIO local secret key |
+| `MINIO_BUCKET_NAME` | Bucket for original documents |
+| `REDIS_URL` | Redis broker and result backend URL |
+| `ES_URL` | Elasticsearch URL |
+| `ES_INDEX_NAME` | Elasticsearch chunk index |
+| `ES_VECTOR_DIMS` | Embedding vector dimensions |
+| `LLM_BASE_URL` | OpenAI-compatible model endpoint |
+| `LLM_API_KEY` | DashScope-compatible Embedding / Chat API key |
+| `DASHSCOPE_API_KEY` | Optional dedicated API key for rerank |
+| `EMBEDDING_MODEL_NAME` | Embedding model name |
+| `CHAT_MODEL_NAME` | Chat model name |
+| `RERANK_ENABLED` | Enable rerank by default |
+| `RERANK_MODEL_NAME` | Rerank model name |
+| `RERANK_APPLY_TO_ASK` | Apply rerank to the production ask flow |
+
+The committed [.env.example](.env.example) contains placeholders and local development defaults only.
+
+## Web Console
+
+The built-in Web console includes:
+
+- **Knowledge workspace** for overall knowledge-base activity
+- **Document collection** for status, task logs, retry, and deletion
+- **Upload and parsing pipeline** for PDF / TXT ingestion
+- **RAG chat playground** for grounded knowledge-base questions
+- **Citation evidence panel** with source file, chunk, page, and score
+- **Retrieval debug page** for Hybrid baseline and rerank comparison
+- **Evaluation report page** for the latest offline metrics
+- **System status dashboard** for dependencies, Worker, and model configuration
+- **API debug entry** linking to FastAPI Swagger
+
+The console is served directly by FastAPI and does not require a separate frontend build.
+
+## API Example
+
+Ask a knowledge-base question:
 
 ```powershell
 $body = @{
@@ -200,69 +262,123 @@ Invoke-RestMethod `
     -Body $body
 ```
 
-响应会包含：
+Example response shape:
 
 ```json
 {
   "answer": "基于知识库上下文生成的回答",
   "answer_type": "grounded",
   "used_retrieval": true,
-  "citations": [],
-  "sources": []
+  "citations": [
+    {
+      "doc_id": 15,
+      "file_name": "example.pdf",
+      "chunk_id": "doc_15_chunk_0",
+      "page_number": 1,
+      "chunk_text": "用于支撑回答的原文片段",
+      "score": 4.12
+    }
+  ],
+  "sources": [
+    {
+      "doc_id": 15,
+      "file_name": "example.pdf",
+      "chunk_id": "doc_15_chunk_0",
+      "page_number": 1,
+      "chunk_text": "用于支撑回答的原文片段",
+      "score": 4.12
+    }
+  ]
 }
 ```
 
-完整接口说明见 [API 概览](docs/architecture/api_overview.md)。
+Full endpoint reference: [API Overview](docs/architecture/api_overview.md)
 
-## RAG 评测
+## RAG Evaluation
 
-评测脚本直接复用现有检索与问答服务，不需要启动浏览器或 FastAPI，但需要 Elasticsearch 中已有可评测 Chunk，并且模型配置可用。
+Run the offline evaluation scripts:
 
 ```powershell
 python evals/run_retrieval_eval.py
 python evals/run_answer_eval.py
 ```
 
-对比 baseline 与 qwen3-rerank：
+Compare baseline retrieval with qwen3-rerank:
 
 ```powershell
 python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 30
 ```
 
-输出文件：
+Generated artifacts:
 
 ```text
 evals/eval_report.md
 evals/eval_results.json
 ```
 
-仓库中的报告是最近一次离线评测结果。普通问答不会自动更新这些文件，需要重新运行评测脚本。指标为 0 可能表示评测用例与当前知识库数据不匹配、索引为空或依赖不可用，不应直接解释为系统整体故障。
+The report is generated from fixed test cases and the current local knowledge base. It does **not** update automatically when users ask questions in the Web console. A zero score can indicate an empty index or a mismatch between evaluation cases and indexed documents; it does not by itself prove that the whole system is broken.
 
-详见 [RAG 评测说明](docs/evaluation/rag_evaluation.md)。
+More details: [RAG Evaluation Guide](docs/evaluation/rag_evaluation.md)
 
-## 注意事项
+## Project Structure
 
-- 不要提交 `.env`、真实 API Key、生产密码或私有原始数据。
-- 本地依赖需要 Docker Desktop 或兼容的 Docker Engine。
-- `qwen3-rerank` 是可选能力，远端调用失败时会回退到 baseline 排序。
-- Worker 未启动时，新上传文档可能一直停留在 `PENDING`。
-- Embedding 输出维度必须与 Elasticsearch Mapping 一致。
-- 当前评测数据只用于工程验证，不代表任何真实官方政策或生产结论。
-- 删除、重试和跨存储补偿仍有继续增强空间，使用前请阅读项目阶段说明。
+```text
+rag_builder/
+├── app/
+│   ├── api/v1/             # FastAPI routes
+│   ├── core/               # Configuration and constants
+│   ├── db/                 # PostgreSQL and MinIO clients
+│   ├── models/             # SQLAlchemy models
+│   ├── schemas/            # Pydantic schemas
+│   ├── services/           # Ingestion, retrieval, answer, health
+│   └── static/             # Built-in Web console
+├── worker/
+│   ├── pipeline/           # Parse, clean, enrich, ingest
+│   └── deepdoc/            # Chunking, Embedding, Elasticsearch
+├── evals/                  # Cases, scripts, and offline reports
+├── docs/
+│   ├── architecture/
+│   ├── operations/
+│   ├── evaluation/
+│   └── assets/             # Future screenshots and demo media
+├── scripts/
+├── docker-compose.yml
+├── .env.example
+└── README.md
+```
 
-## 项目状态
+## Roadmap
 
-当前为本地工程版 / 开发版，核心的上传、异步解析、检索、问答、引用、重排调试、离线评测和控制台链路已经具备。生产化前仍建议补充自动化测试、权限控制、任务幂等、唯一对象名、失败补偿、文件大小限制和更完整的可观测性。
+- [ ] Add stable MinIO object names and idempotent Elasticsearch writes
+- [ ] Add more document parsers and OCR support
+- [ ] Add automated unit and API tests
+- [ ] Add Web-triggered evaluation jobs
+- [ ] Add multi-knowledge-base management
+- [ ] Add user authentication and permissions for the Web console
+- [ ] Add Docker image packaging and deployment guidance
+- [ ] Add demo video, GIF, and release screenshots
 
-## 文档
+## Security Notes
 
-- [项目全景](docs/architecture/project_overview.md)
-- [系统架构](docs/architecture/project_architecture.md)
-- [RAG 流水线](docs/architecture/rag_pipeline.md)
-- [API 概览](docs/architecture/api_overview.md)
-- [本地启动](docs/operations/local_start.md)
-- [本地测试](docs/operations/testing.md)
-- [常见问题](docs/operations/troubleshooting.md)
-- [功能验收清单](docs/operations/project_checklist.md)
-- [RAG 评测](docs/evaluation/rag_evaluation.md)
-- [当前阶段说明](docs/architecture/stage_summary_current.md)
+- Do not commit `.env`, real API keys, production passwords, or private source documents.
+- Use `.env.example` as the public configuration template.
+- Review and sanitize documents before uploading sensitive files.
+- Treat bundled evaluation data and local sample data as development-only assets.
+- Rotate credentials immediately if a real secret is ever committed.
+- Review cross-storage deletion and retry behavior before production deployment.
+
+## Documentation
+
+- [Project Overview](docs/architecture/project_overview.md)
+- [Project Architecture](docs/architecture/project_architecture.md)
+- [RAG Pipeline](docs/architecture/rag_pipeline.md)
+- [API Overview](docs/architecture/api_overview.md)
+- [Local Start Guide](docs/operations/local_start.md)
+- [Testing Guide](docs/operations/testing.md)
+- [Troubleshooting](docs/operations/troubleshooting.md)
+- [RAG Evaluation](docs/evaluation/rag_evaluation.md)
+- [Current Stage Summary](docs/architecture/stage_summary_current.md)
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
