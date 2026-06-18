@@ -14,6 +14,15 @@ python evals/run_retrieval_eval.py
 python evals/run_answer_eval.py
 ```
 
+默认使用 `evals/cases/rag_retrieval_cases.json`，这套用例面向 RAG Builder 项目说明文档。若当前知识库主要是公务员/事业单位政策文件，可以切换到政策评测集：
+
+```powershell
+python evals/run_retrieval_eval.py --case-file evals/cases/exam_policy_cases.json
+python evals/run_answer_eval.py --case-file evals/cases/exam_policy_cases.json
+```
+
+`--cases` 仍可继续使用，`--case-file` 是更直观的等价参数。
+
 启用 qwen3-rerank 对比：
 
 ```powershell
@@ -51,12 +60,14 @@ python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 30
 ## 用例与产物
 
 ```text
-evals/cases/rag_retrieval_cases.json   评测用例
+evals/cases/rag_retrieval_cases.json   默认 RAG Builder 项目评测集
+evals/cases/exam_policy_cases.json     公务员/事业单位政策评测集
 evals/eval_report.md                   最近一次 Markdown 报告
 evals/eval_results.json                最近一次结构化结果
 ```
 
 这些文件是离线产物。普通 `/api/v1/search/ask` 请求不会自动更新它们，控制台只读展示最近一次结果。
+报告会记录最近一次运行所使用的评测集名称和用例文件。
 
 ## 如何解释零分
 

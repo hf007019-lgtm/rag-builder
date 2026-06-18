@@ -334,6 +334,8 @@ GET /api/v1/eval/report
 |---|---|
 | `available` | 是否读取到评测产物 |
 | `generated_at` | 最近评测生成时间 |
+| `case_set_name` | 最近一次运行使用的评测集名称 |
+| `case_file` | 最近一次运行使用的评测用例文件 |
 | `retrieval` | 检索评测原始指标 |
 | `answer` | 答案与引用评测原始指标 |
 | `failures` | 汇总后的失败用例 |

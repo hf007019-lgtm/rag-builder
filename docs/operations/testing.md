@@ -287,6 +287,13 @@ python evals/run_retrieval_eval.py
 python evals/run_answer_eval.py
 ```
 
+如果当前知识库是公务员/事业单位政策文件，使用匹配的政策评测集：
+
+```powershell
+python evals/run_retrieval_eval.py --case-file evals/cases/exam_policy_cases.json
+python evals/run_answer_eval.py --case-file evals/cases/exam_policy_cases.json
+```
+
 检索脚本默认计算：
 
 - `hit_rate@k`
@@ -320,6 +327,7 @@ API Key 优先读取 `DASHSCOPE_API_KEY`，未配置时复用现有 `LLM_API_KEY
 
 ```text
 evals/cases/rag_retrieval_cases.json
+evals/cases/exam_policy_cases.json
 ```
 
 有真实知识库数据后，建议按以下优先级填写预期结果：
