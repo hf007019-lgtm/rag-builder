@@ -167,19 +167,36 @@ def _string_set(values: Iterable[Any]) -> set:
     }
 
 
+def _normalized_list(values: Iterable[Any]) -> List[str]:
+    return [
+        str(value).strip().lower()
+        for value in values
+        if value is not None and str(value).strip()
+    ]
+
+
+def _expected_file_name_keywords(case: Dict[str, Any]) -> List[str]:
+    """兼容精确文件名和文件名关键词，避免评测用例绑定本地 doc_id。"""
+    values = []
+    for field_name in ("expected_file_name_keywords", "expected_file_names"):
+        field_value = case.get(field_name, [])
+        if isinstance(field_value, str):
+            values.append(field_value)
+        else:
+            values.extend(field_value or [])
+    return list(dict.fromkeys(_normalized_list(values)))
+
+
 def evaluate_ranking(
     case: Dict[str, Any],
     results: List[Dict[str, Any]],
     top_k: int
 ) -> Dict[str, Any]:
-    """按 chunk_id、关键词、doc_id 的优先级评估一组排序结果。"""
+    """按 chunk_id、文件名关键词、内容关键词、doc_id 的优先级评估排序结果。"""
     top_results = results[:top_k]
     expected_chunk_ids = _string_set(case.get("expected_chunk_ids", []))
-    expected_keywords = [
-        str(value).strip().lower()
-        for value in case.get("expected_keywords", [])
-        if str(value).strip()
-    ]
+    expected_keywords = _normalized_list(case.get("expected_keywords", []))
+    expected_file_keywords = _expected_file_name_keywords(case)
     expected_doc_ids = _string_set(case.get("expected_doc_ids", []))
 
     if expected_chunk_ids:
@@ -194,6 +211,49 @@ def evaluate_ranking(
             for item in top_results
         ]
         expected_count = len(expected_chunk_ids)
+    elif expected_file_keywords and expected_keywords:
+        mode = "file_name+keyword"
+        found_items = set()
+        relevance = []
+
+        for item in top_results:
+            file_name = str(item.get("file_name", "")).lower()
+            chunk_text = str(item.get("chunk_text", "")).lower()
+            matched_files = {
+                keyword
+                for keyword in expected_file_keywords
+                if keyword in file_name
+            }
+            matched_keywords = {
+                keyword
+                for keyword in expected_keywords
+                if keyword in chunk_text
+            }
+            if matched_files:
+                found_items.update(f"file:{keyword}" for keyword in matched_files)
+            if matched_files and matched_keywords:
+                found_items.update(
+                    f"keyword:{keyword}" for keyword in matched_keywords
+                )
+            relevance.append(bool(matched_files and matched_keywords))
+
+        expected_count = len(expected_file_keywords) + len(expected_keywords)
+    elif expected_file_keywords:
+        mode = "file_name"
+        found_items = set()
+        relevance = []
+
+        for item in top_results:
+            file_name = str(item.get("file_name", "")).lower()
+            matched = {
+                keyword
+                for keyword in expected_file_keywords
+                if keyword in file_name
+            }
+            found_items.update(matched)
+            relevance.append(bool(matched))
+
+        expected_count = len(expected_file_keywords)
     elif expected_keywords:
         mode = "keyword"
         found_items = set()
@@ -245,7 +305,7 @@ def evaluate_ranking(
     return {
         "eligible": True,
         "mode": mode,
-        "hit": 1.0 if found_items else 0.0,
+        "hit": 1.0 if first_relevant_rank else 0.0,
         "recall": len(found_items) / expected_count,
         "precision": sum(relevance) / top_k,
         "mrr": 1.0 / first_relevant_rank if first_relevant_rank else 0.0,
@@ -317,11 +377,8 @@ def evaluate_citation_coverage(
 ) -> Dict[str, Any]:
     expected_chunk_ids = _string_set(case.get("expected_chunk_ids", []))
     expected_doc_ids = _string_set(case.get("expected_doc_ids", []))
-    expected_keywords = [
-        str(value).strip().lower()
-        for value in case.get("expected_keywords", [])
-        if str(value).strip()
-    ]
+    expected_keywords = _normalized_list(case.get("expected_keywords", []))
+    expected_file_keywords = _expected_file_name_keywords(case)
 
     if expected_chunk_ids:
         matched = any(
@@ -329,6 +386,33 @@ def evaluate_citation_coverage(
             for item in citations
         )
         return {"eligible": True, "covered": matched, "mode": "chunk_id"}
+
+    if expected_file_keywords and expected_keywords:
+        citation_text = "\n".join(
+            str(item.get("chunk_text") or item.get("text_preview") or "")
+            for item in citations
+        ).lower()
+        matched_file = any(
+            keyword in str(item.get("file_name", "")).lower()
+            for item in citations
+            for keyword in expected_file_keywords
+        )
+        matched_keyword = any(
+            keyword in citation_text for keyword in expected_keywords
+        )
+        return {
+            "eligible": True,
+            "covered": matched_file and matched_keyword,
+            "mode": "file_name+keyword"
+        }
+
+    if expected_file_keywords:
+        matched = any(
+            keyword in str(item.get("file_name", "")).lower()
+            for item in citations
+            for keyword in expected_file_keywords
+        )
+        return {"eligible": True, "covered": matched, "mode": "file_name"}
 
     if expected_doc_ids:
         matched = any(
@@ -544,7 +628,7 @@ def render_report(state: Dict[str, Any]) -> str:
         for note in dict.fromkeys(notes):
             lines.append(f"- {note}")
     else:
-        lines.append("- 用真实 chunk_id/doc_id 替换示例 case 中的空数组。")
+        lines.append("- 优先补充 expected_file_name_keywords、expected_keywords 和 expected_claims；有稳定 chunk 后再补充 expected_chunk_ids。")
 
     lines.extend([
         "- 固定一组稳定知识库数据后，再据此调整 top_k、阈值和混合检索权重。",

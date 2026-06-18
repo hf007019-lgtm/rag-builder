@@ -58,7 +58,7 @@ http://127.0.0.1:18000/docs
 Windows 下使用：
 
 ```powershell
-python -m celery -A worker.celery_app.celery_app worker --loglevel=info --pool=solo
+python -m celery -A worker.celery_app:celery_app worker --loglevel=info --pool=solo
 ```
 
 预期能看到 `ready`，并且任务列表里包含：
@@ -122,6 +122,7 @@ POST /api/v1/documents/upload
 ```
 
 单文件和批量上传当前支持 `.pdf`、`.txt`、`.md`、`.docx`。`.doc` 老格式会被拒绝，并提示转换为 `.docx` 后上传。
+批量上传默认最多 10 个文件；如需调整，使用 `.env.example` 中的 `BATCH_UPLOAD_MAX_FILES` 作为公开示例配置。
 
 返回示例：
 
@@ -150,6 +151,7 @@ python scripts/test_docx_upload.py
 ```
 
 这个脚本会动态生成 `.docx` 文件并调用批量上传接口。若 Worker 未启动，脚本允许只验证上传进入 `PENDING`。
+后台解析会按 `EMBEDDING_BATCH_SIZE` 分批调用 Embedding，默认每批 20 条，避免单次向量化请求超过模型限制。
 
 ## 8. 查询状态
 
@@ -287,7 +289,7 @@ python evals/run_retrieval_eval.py
 python evals/run_answer_eval.py
 ```
 
-如果当前知识库是公务员/事业单位政策文件，使用匹配的政策评测集：
+如果当前知识库是公务员/事业单位政策文件，使用匹配的公务员/事业单位政策评测集：
 
 ```powershell
 python evals/run_retrieval_eval.py --case-file evals/cases/exam_policy_cases.json
@@ -334,9 +336,12 @@ evals/cases/exam_policy_cases.json
 
 ```text
 expected_chunk_ids
+-> expected_file_name_keywords + expected_keywords
 -> expected_keywords
 -> expected_doc_ids
 ```
+
+政策评测集中的 `optional_doc_id_hints` 只记录本地样例参考 ID，不作为强制命中条件；公开评测应优先依赖文件名关键词、内容关键词和 expected claims。
 
 答案评测会检查来源命中、expected claims、不可回答问题的拒答行为，并用词面重叠启发式统计 `unsupported_claim_count`。当前接口优先评估标准 `citations` 字段，同时保留 `sources` 兼容覆盖统计。
 

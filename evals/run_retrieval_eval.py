@@ -188,13 +188,13 @@ def run_evaluation(
 
         failure_reasons = []
         if baseline_metrics.get("eligible") and not baseline_metrics["hit"]:
-            failure_reasons.append("baseline 未命中预期 chunk/doc/关键词")
+            failure_reasons.append("baseline 未命中预期 chunk/文件名/关键词/doc")
         if (
             rerank_metrics
             and rerank_metrics.get("eligible")
             and not rerank_metrics["hit"]
         ):
-            failure_reasons.append("rerank 未命中预期 chunk/doc/关键词")
+            failure_reasons.append("rerank 未命中预期 chunk/文件名/关键词/doc")
         if failure_reasons:
             failures.append({
                 "stage": "retrieval",
@@ -241,7 +241,7 @@ def run_evaluation(
         rerank_summary = aggregate_ranking([])
 
     notes = [
-        "示例 case 默认使用 expected_keywords 弱评测；有真实 ID 后优先填写 expected_chunk_ids。"
+        "示例 case 默认使用 expected_file_name_keywords 和 expected_keywords 弱评测；有真实 chunk 后优先填写 expected_chunk_ids。"
     ]
     if not rerank_enabled:
         notes.append(

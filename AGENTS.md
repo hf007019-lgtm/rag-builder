@@ -20,11 +20,15 @@ D:\PycharmProjects\rag_builder
 
 核心能力包括：
 
-- 文档上传、查重和原文件保存。
+- `.pdf`、`.txt`、`.md`、`.docx` 文档上传、查重和原文件保存。
+- 单文件上传和批量上传，批量上传默认最多 10 个文件。
 - 文档元数据及任务状态管理。
-- Celery 异步解析、清洗、切块和向量化。
+- Celery 异步解析、清洗、切块和向量化，支持 Word(.docx) 解析。
+- Embedding 分批处理，默认每批 20 条，避免超过模型批量限制。
 - Elasticsearch 文本与向量检索。
+- 可选 `qwen3-rerank` 重排。
 - 基于检索上下文的 LLM 问答与来源返回。
+- 默认 RAG Builder 项目评测集和公务员/事业单位政策评测集。
 - 面向本地演示的轻量静态控制台。
 
 本项目参考 RAGFlow 的工程分层思想，但不是 RAGFlow 的完整复刻，也不追求一次性实现商业化知识库平台的全部能力。
@@ -52,10 +56,10 @@ D:\PycharmProjects\rag_builder
 | 消息队列 | Redis |
 | 异步任务 | Celery |
 | 检索引擎 | Elasticsearch 8.11.1 |
-| 文档解析 | pypdf；依赖中还包含 PyMuPDF |
+| 文档解析 | pypdf、PyMuPDF、python-docx |
 | 文本切分 | langchain-text-splitters |
 | LLM / Embedding | OpenAI Python SDK 兼容接口 |
-| 当前模型服务 | DashScope OpenAI 兼容模式，默认 Qwen |
+| 当前模型服务 | DashScope OpenAI 兼容模式，默认 Qwen，支持 qwen3-rerank |
 | 本地依赖编排 | Docker Compose |
 | 演示页面 | 原生 HTML、CSS、JavaScript 静态控制台 |
 
@@ -66,17 +70,18 @@ D:\PycharmProjects\rag_builder
 FastAPI 上传接口只完成必要的同步工作：
 
 ```text
-接收 PDF/TXT
+接收 PDF/TXT/Markdown/Word(.docx)
 -> 校验文件名、后缀和非空内容
+-> 拒绝 .doc 老格式并提示转换为 .docx
 -> 读取文件并计算 SHA-256
 -> PostgreSQL 按 file_hash 查重
 -> 原文件写入 MinIO
 -> documents 写入 PostgreSQL，状态为 PENDING
 -> 向 Redis/Celery 投递 parse_document_task
--> 立即返回 doc_id、文件名和状态
+-> 立即返回 doc_id、文件名、状态和可用的 task_id
 ```
 
-当前代码没有独立返回 Celery `task_id`，对外追踪主键是 `doc_id`。若未来增加 `task_id`，必须同步设计数据库字段、响应模型和查询接口。
+批量上传接口复用同一套校验和投递流程，默认单次最多 10 个文件。对外稳定追踪主键仍是 `doc_id`，Celery `task_id` 可作为异步任务辅助信息展示。
 
 ### 5.2 异步解析阶段
 
@@ -88,10 +93,10 @@ Celery Worker 后台执行：
 -> 创建 STARTED task_log
 -> documents.status 更新为 PARSING
 -> 从 MinIO 读取原文件
--> 解析 PDF/TXT
+-> 解析 PDF/TXT/Markdown/Word(.docx)
 -> 清洗文本
 -> 按约 500 字符、50 字符重叠切块
--> 调用 Embedding 接口
+-> 按 EMBEDDING_BATCH_SIZE 分批调用 Embedding 接口，默认每批 20 条
 -> 写入 Elasticsearch
 -> documents.status 更新为 SUCCESS
 -> task_log 更新为 SUCCESS 并记录 chunk_count
@@ -106,12 +111,13 @@ Celery Worker 后台执行：
 -> 问题向量化
 -> Elasticsearch 向量 + 关键词混合检索
 -> 文件类型、最高分文档和相关性阈值过滤
+-> 可选 qwen3-rerank 重排
 -> 组织检索上下文
 -> 调用 Chat 模型
--> 返回 answer 和 sources
+-> 返回 answer、citations 和 sources
 ```
 
-`sources` 当前包含 `doc_id`、`file_name`、`chunk_id`、`page_number`、`chunk_text` 和 `score`。
+`citations` / `sources` 当前包含 `doc_id`、`file_name`、`chunk_id`、`page_number`、`chunk_text` 和 `score`。
 
 ## 6. 为什么必须先写 PostgreSQL PENDING
 
@@ -134,13 +140,14 @@ app/
   db/                     PostgreSQL 会话和 MinIO 客户端
   models/                 SQLAlchemy 模型
   schemas/                Pydantic 请求/响应模型
-  services/               上传、文档、检索、提示词、健康检查逻辑
+  services/               上传、文档、检索、提示词、评测读取和健康检查逻辑
   static/                 本地演示控制台
 worker/
   celery_app.py           Celery 应用
   tasks.py                异步任务和任务日志
   pipeline/               解析、清洗、元数据和入库流水线
   deepdoc/                文本切分、Embedding、Elasticsearch
+evals/                    离线评测脚本、用例和最近一次评测产物
 scripts/
   check_env.py            环境变量检查
   init_db.py              PostgreSQL 建表
@@ -216,13 +223,15 @@ docs/
 
 ## 12. 文档上传规范
 
-- 当前只接受 `.pdf` 和 `.txt`。
-- 必须校验文件名、后缀、空文件和重复内容。
+- 当前支持 `.pdf`、`.txt`、`.md`、`.docx`。
+- `.doc` 老格式暂不支持，用户应先用 Word/WPS 转换为 `.docx`。
+- 支持单文件上传和批量上传，批量上传默认最多 10 个文件。
+- 必须校验文件名、后缀、空文件、文件大小和重复内容。
 - 使用 SHA-256 `file_hash` 做内容查重。
 - 上传接口应快速返回，不承担解析和模型调用。
 - 原文件进入 MinIO，PostgreSQL 只保存元数据。
 - 当前 MinIO 对象名直接使用原文件名，存在“同名不同内容覆盖”风险；扩展上传逻辑时优先改为稳定唯一对象名，并同时保存 `object_name`。
-- 大文件场景应考虑流式读取、文件大小限制和超时，不能无限制把全部文件读入内存。
+- 大文件场景应继续考虑流式读取和超时控制，不能长期依赖一次性把全部文件读入内存。
 
 ## 13. 异步任务规范
 
@@ -239,7 +248,9 @@ docs/
 - 文档 chunk 和查询问题必须使用兼容的 Embedding 模型。
 - Embedding 维度必须与 Elasticsearch mapping 一致。
 - 当前基础检索为向量 KNN 与 `chunk_text` 关键词匹配的混合检索。
+- `qwen3-rerank` 是可选能力，调用失败时应能回退到 baseline。
 - 调整 `top_k`、boost 或相关性阈值前，应使用固定测试集验证召回质量。
+- 离线评测支持默认 RAG Builder 项目评测集和公务员/事业单位政策评测集。
 - 无可靠检索结果时返回“知识库中没有足够依据”，不要让模型脱离上下文编造。
 - 返回给调用方的来源字段不得由模型虚构。
 
@@ -285,6 +296,7 @@ docs/
 - `LLM_BASE_URL`、`LLM_API_KEY`、模型名必须由环境配置提供。
 - API Key 不写入代码、文档、日志或 Git。
 - Embedding 和 Chat 模型职责分开。
+- Embedding 必须分批调用，默认 `EMBEDDING_BATCH_SIZE=20`，实际单批不得超过安全上限 20。
 - 调用失败应说明是鉴权、限流、网络、模型不存在还是响应格式异常。
 - 未来增加批处理、超时、重试和限流时，应避免造成重复 ES 写入。
 - 模型回答只能基于检索上下文，缺少依据时明确拒答。
@@ -306,12 +318,17 @@ docs/
 - Compose 配置检查：`docker compose config`
 - PostgreSQL 建表：`python scripts/init_db.py`
 - FastAPI 启动：`uvicorn app.main:app --host 127.0.0.1 --port 18000`
-- Windows Worker：`python -m celery -A worker.celery_app.celery_app worker --loglevel=info --pool=solo`
+- Windows Worker：`python -m celery -A worker.celery_app:celery_app worker --loglevel=info --pool=solo`
 - 基础健康：`GET /api/v1/health`
 - 依赖健康：`GET /api/v1/health/dependencies`
-- 上传 TXT/PDF，并检查 `PENDING -> PARSING -> SUCCESS`
+- 上传 TXT/PDF/Markdown/Word(.docx)，并检查 `PENDING -> PARSING -> SUCCESS`
+- 批量上传多个文件，默认单次不超过 10 个。
+- Word(.docx) 可使用 `python scripts/test_docx_upload.py` 做本地验证。
 - 检查 `task_logs`、失败状态和 retry
-- 检查 `/api/v1/search/ask` 的 `answer` 与 `sources`
+- 检查 `/api/v1/search/ask` 的 `answer`、`citations` 与 `sources`
+- 检查 Embedding 分批日志，默认每批 20 条。
+- 使用匹配知识库的评测集，例如政策文档运行 `python evals/run_retrieval_eval.py --case-file evals/cases/exam_policy_cases.json`。
+- 需要对比重排时运行 `python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 30`。
 - 检查删除时 PostgreSQL、MinIO 和 ES 的一致性
 - 检查重复内容、同名不同内容、空文件和不支持后缀
 
@@ -340,7 +357,7 @@ feat: add document parsing status endpoint
 - 上传在数据库提交后再投递 Celery；若投递失败，可能留下长期 `PENDING`。
 - 失败任务若已写入部分 chunk，retry 可能重复写入。
 - 删除流程对 MinIO/ES 的部分失败处理较宽松，可能形成残留数据。
-- 上传仍会一次性读取完整文件，尚未设置文件大小限制。
+- 上传仍会一次性读取完整文件；已有文件大小上限配置，但尚未流式处理。
 - 仓库已有离线 RAG 评测，但尚无 pytest 自动化测试目录。
 
 修改相关代码时应优先解决对应风险，但不要在无关任务中扩大范围。

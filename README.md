@@ -76,12 +76,13 @@ RAG Builder 的工程价值在于：它把这些“Demo 之外的问题”变成
 - 文档解析、清洗、切分。
 - Word(.docx) 文档解析（Word(.docx) document parsing）。
 - DashScope Embedding。
+- Embedding 分批处理，默认每批 20 条。
 - Elasticsearch 混合检索。
 - `qwen3-rerank` 可选重排。
 - LLM 生成带引用回答。
 - `citations` / `sources` 引用溯源。
 - 检索调试。
-- 离线评测。
+- 默认评测集与公务员/事业单位政策评测集。
 - 系统状态面板。
 - Web 控制台。
 
@@ -207,7 +208,8 @@ http://127.0.0.1:18000
 ### 1. 安装依赖
 
 ```powershell
-cd D:\PycharmProjects\rag_builder
+git clone https://github.com/hf007019-lgtm/rag-builder.git
+cd rag-builder
 python -m venv .venv
 .\.venv\Scripts\activate
 python -m pip install -r requirements.txt

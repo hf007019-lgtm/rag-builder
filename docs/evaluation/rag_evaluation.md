@@ -33,9 +33,10 @@ python evals/run_retrieval_eval.py --use-rerank --top-k 3 --top-n 30
 
 - Elasticsearch 可访问。
 - `rag_chunks` 中存在已解析成功的 Chunk。
-- Embedding 配置可用。
+- Embedding 配置可用；文档入库阶段支持按 `EMBEDDING_BATCH_SIZE` 分批，默认每批 20 条。
 - 答案评测需要 Chat 模型配置可用。
 - Rerank 对比需要有效的 DashScope Key。
+- 当前上传链路支持单文件和批量上传 PDF / TXT / Markdown / Word(.docx)，`.doc` 需要先转换为 `.docx`。
 
 ## 评测内容
 
@@ -68,6 +69,17 @@ evals/eval_results.json                最近一次结构化结果
 
 这些文件是离线产物。普通 `/api/v1/search/ask` 请求不会自动更新它们，控制台只读展示最近一次结果。
 报告会记录最近一次运行所使用的评测集名称和用例文件。
+
+政策评测集不强依赖本地数据库中的固定 `doc_id`。推荐优先使用：
+
+```text
+expected_chunk_ids
+-> expected_file_name_keywords + expected_keywords
+-> expected_keywords
+-> expected_doc_ids
+```
+
+其中 `optional_doc_id_hints` 只用于记录当前本地样例中的参考 ID，不参与强制命中判断。
 
 ## 如何解释零分
 
