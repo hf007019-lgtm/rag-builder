@@ -121,6 +121,8 @@ Swagger 中调用：
 POST /api/v1/documents/upload
 ```
 
+单文件和批量上传当前支持 `.pdf`、`.txt`、`.md`、`.docx`。`.doc` 老格式会被拒绝，并提示转换为 `.docx` 后上传。
+
 返回示例：
 
 ```json
@@ -128,11 +130,26 @@ POST /api/v1/documents/upload
   "msg": "上传成功，后台解析任务已提交",
   "doc_id": 15,
   "file_name": "rag_test_01.txt",
-  "status": "PENDING"
+  "status": "PENDING",
+  "task_id": "8c7d6f0d-2f5b-49e1-9f1d-2adf1b8f7e61"
 }
 ```
 
 上传后看 Worker 终端，应能看到解析日志。最终文档状态应变为 `SUCCESS`。
+
+批量上传接口：
+
+```http
+POST /api/v1/documents/batch-upload
+```
+
+也可以运行本地 Word 验证脚本：
+
+```powershell
+python scripts/test_docx_upload.py
+```
+
+这个脚本会动态生成 `.docx` 文件并调用批量上传接口。若 Worker 未启动，脚本允许只验证上传进入 `PENDING`。
 
 ## 8. 查询状态
 

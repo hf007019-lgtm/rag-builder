@@ -35,7 +35,7 @@ RAG Builder 是一个本地可运行的轻量级企业知识库 RAG 工程系统
 ### 文档上传
 
 ```text
-接收 PDF/TXT
+接收 PDF/TXT/Markdown/Word(.docx)
 -> 校验文件名、后缀和空内容
 -> 读取文件并计算 SHA-256
 -> PostgreSQL 按 file_hash 查重
@@ -121,7 +121,8 @@ docs/                     架构、运维、评测和导入报告
 | `GET` | `/docs` | Swagger |
 | `GET` | `/api/v1/health` | FastAPI 基础健康 |
 | `GET` | `/api/v1/health/dependencies` | 核心依赖健康 |
-| `POST` | `/api/v1/documents/upload` | 上传 PDF/TXT 并派发任务 |
+| `POST` | `/api/v1/documents/upload` | 上传单个 PDF/TXT/Markdown/Word(.docx) 并派发任务 |
+| `POST` | `/api/v1/documents/batch-upload` | 批量上传多个文档并逐个返回处理结果 |
 | `GET` | `/api/v1/documents/` | 文档列表 |
 | `GET` | `/api/v1/documents/{doc_id}/status` | 文档状态 |
 | `GET` | `/api/v1/documents/{doc_id}/task-log` | 任务日志 |
@@ -142,6 +143,8 @@ docs/                     架构、运维、评测和导入报告
 | `MINIO_ENDPOINT` | MinIO API 地址 |
 | `MINIO_ACCESS_KEY` / `MINIO_SECRET_KEY` | MinIO 本地凭据 |
 | `MINIO_BUCKET_NAME` | 原始文件 Bucket |
+| `MAX_UPLOAD_FILE_SIZE_MB` | 单个上传文件大小上限，默认 20 MB |
+| `BATCH_UPLOAD_MAX_FILES` | 批量上传单次文件数上限，默认 10 |
 | `REDIS_URL` | Celery Redis 地址 |
 | `ES_URL` | Elasticsearch 地址 |
 | `ES_INDEX_NAME` | Chunk 索引名 |
@@ -181,11 +184,11 @@ docs/                     架构、运维、评测和导入报告
 
 ## 当前已实现能力
 
-- PDF/TXT 上传、空文件校验、后缀校验和内容去重
+- PDF/TXT/Markdown/Word(.docx) 上传、批量上传、空文件校验、后缀校验和内容去重
 - MinIO 原文件上传、读取和删除
 - PostgreSQL 文档状态和任务日志
 - Redis + Celery 异步解析
-- 文本解析、清洗、切块和 Embedding
+- PDF、文本、Markdown 和 Word(.docx) 解析、清洗、切块和 Embedding
 - Elasticsearch Chunk / Vector 写入、混合检索和按文档删除
 - 文档列表、状态、日志、失败重试和删除
 - 带 `answer_type`、`used_retrieval`、`citations`、`sources` 的问答响应

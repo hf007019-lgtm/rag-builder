@@ -22,13 +22,13 @@ http://127.0.0.1:18000/docs
 POST /api/v1/documents/upload
 ```
 
-用途：上传 PDF 或 TXT 文件。上传成功后，FastAPI 会保存原始文件、写入文档记录，并派发 Celery 解析任务。
+用途：上传单个 PDF、TXT、Markdown 或 Word(.docx) 文件。上传成功后，FastAPI 会保存原始文件、写入文档记录，并派发 Celery 解析任务。
 
 请求参数：
 
 | 参数 | 类型 | 说明 |
 |---|---|---|
-| `file` | file | 上传文件，目前支持 `.pdf`、`.txt` |
+| `file` | file | 上传文件，目前支持 `.pdf`、`.txt`、`.md`、`.docx` |
 
 返回示例：
 
@@ -37,7 +37,8 @@ POST /api/v1/documents/upload
   "msg": "上传成功，后台解析任务已提交",
   "doc_id": 15,
   "file_name": "rag_test_01.txt",
-  "status": "PENDING"
+  "status": "PENDING",
+  "task_id": "8c7d6f0d-2f5b-49e1-9f1d-2adf1b8f7e61"
 }
 ```
 
@@ -45,6 +46,63 @@ POST /api/v1/documents/upload
 
 - 相同内容的文件会按 Hash 去重，可能直接返回已有文档信息。
 - 上传后解析是异步执行的，需要通过状态接口查看结果。
+- 暂不支持 `.doc` 老格式，请转换为 `.docx` 后上传。
+
+## 批量上传
+
+接口：
+
+```http
+POST /api/v1/documents/batch-upload
+```
+
+用途：一次上传多个 PDF、TXT、Markdown 或 Word(.docx) 文件。接口会逐个校验、查重、保存原文件、创建文档记录并派发 Celery 解析任务；单个文件失败不会影响其他文件。
+
+请求参数：
+
+| 参数 | 类型 | 说明 |
+|---|---|---|
+| `files` | file[] | 多个上传文件，默认一次最多 10 个 |
+
+返回示例：
+
+```json
+{
+  "success": true,
+  "total": 3,
+  "accepted": 2,
+  "failed": 1,
+  "items": [
+    {
+      "filename": "policy_a.docx",
+      "document_id": 21,
+      "task_id": "8c7d6f0d-2f5b-49e1-9f1d-2adf1b8f7e61",
+      "status": "PENDING",
+      "message": "上传成功，后台解析任务已提交"
+    },
+    {
+      "filename": "policy_b.txt",
+      "document_id": 22,
+      "task_id": "9b6c5f0d-7a1e-44d4-9e2f-4c90d0ef5b11",
+      "status": "PENDING",
+      "message": "上传成功，后台解析任务已提交"
+    },
+    {
+      "filename": "old_file.doc",
+      "document_id": null,
+      "task_id": null,
+      "status": "FAILED",
+      "message": "暂不支持 .doc 老格式，请转换为 .docx 后上传。"
+    }
+  ]
+}
+```
+
+注意：
+
+- 支持扩展名：`.pdf`、`.txt`、`.md`、`.docx`。
+- 单个文件超过配置的大小上限会在该文件结果中返回失败原因。
+- 重复内容会按 Hash 命中已有文档，不会重复写入 MinIO 或重复派发解析任务。
 
 ## 文档列表
 
@@ -65,12 +123,13 @@ GET /api/v1/documents/
     "file_name": "rag_test_01.txt",
     "status": "SUCCESS",
     "created_at": "2026-06-01T22:22:44",
-    "chunk_count": 3
+    "chunk_count": 3,
+    "error_message": null
   }
 ]
 ```
 
-`chunk_count` 来自最近一次包含统计结果的解析任务；暂无统计时为 `null`。
+`chunk_count` 来自最近一次包含统计结果的解析任务；暂无统计时为 `null`。`error_message` 来自最近一次失败任务日志，成功文档通常为 `null`。
 
 ## 文档状态
 

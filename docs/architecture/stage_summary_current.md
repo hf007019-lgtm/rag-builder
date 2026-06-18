@@ -19,9 +19,9 @@ RAG Builder 已形成“文档上传 -> Celery 异步解析 -> Elasticsearch 入
 
 - FastAPI、Swagger 和原生 Web 控制台
 - PostgreSQL、MinIO、Redis、Elasticsearch、Kibana Compose 定义
-- PDF/TXT 上传、空文件校验、后缀校验和 SHA-256 去重
+- PDF/TXT/Markdown/Word(.docx) 单文件与批量上传、空文件校验、后缀校验和 SHA-256 去重
 - `PENDING/PARSING/SUCCESS/FAILED` 状态流转
-- Celery Worker 异步解析、清洗、切块、Embedding 和入库
+- Celery Worker 异步解析 PDF、文本、Markdown、Word(.docx)，并完成清洗、切块、Embedding 和入库
 - 文档列表、状态、任务日志、失败重试和删除
 - Elasticsearch 向量与关键词混合检索
 - `grounded/unanswerable/chitchat` 回答类型
