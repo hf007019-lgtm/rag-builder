@@ -15,6 +15,7 @@ openai
 
 pypdf
 PyMuPDF
+python-docx
 
 requests
 langchain-text-splitters

@@ -2,9 +2,9 @@
 # 作用：BaseModel 用来定义接口请求和响应的数据格式
 from pydantic import BaseModel
 
-# 从 typing 导入 Optional
+# 从 typing 导入 List、Optional
 # Optional 表示这个字段可以有值，也可以是 None
-from typing import Optional
+from typing import List, Optional
 
 
 # 从 datetime 导入 datetime
@@ -88,6 +88,10 @@ class DocumentListItem(BaseModel):
     # 最近一次成功解析生成的 chunk 数
     chunk_count: Optional[int] = None
 
+    # 最近一次失败原因
+    # 只有解析失败时通常会有值
+    error_message: Optional[str] = None
+
 
 # 定义上传文档响应模型
 # 作用：规定上传接口返回给前端的数据格式
@@ -108,6 +112,50 @@ class UploadDocumentResponse(BaseModel):
     # 文档状态
     # 作用：上传后一般是 PENDING
     status: str
+
+    # Celery 任务 ID
+    # 秒传或历史重复文件不会重新派发任务，因此可以为空
+    task_id: Optional[str] = None
+
+
+# 定义批量上传中单个文件的响应项
+class BatchUploadItem(BaseModel):
+
+    # 用户上传的原始文件名
+    filename: str
+
+    # 成功入库或命中重复文件时返回文档 ID
+    document_id: Optional[int] = None
+
+    # 新派发的 Celery 任务 ID
+    # 失败或重复文件可以为空
+    task_id: Optional[str] = None
+
+    # 当前文件状态
+    # 成功提交通常是 PENDING，失败校验返回 FAILED
+    status: str
+
+    # 给前端展示的中文说明
+    message: str
+
+
+# 定义批量上传响应模型
+class BatchUploadResponse(BaseModel):
+
+    # 本批次是否至少有一个文件被接收
+    success: bool
+
+    # 本次提交的文件总数
+    total: int
+
+    # 被接收或命中已有文档的文件数
+    accepted: int
+
+    # 校验或处理失败的文件数
+    failed: int
+
+    # 每个文件的独立处理结果
+    items: List[BatchUploadItem]
 
 
 # 定义删除文档响应模型

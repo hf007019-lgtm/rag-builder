@@ -40,6 +40,14 @@ from worker.deepdoc.es_client import VectorStore
 from worker.celery_app import celery_app
 
 
+# 从用户文案服务导入异常脱敏函数
+# 作用：接口返回前隐藏 Python 原始异常，数据库日志仍保留原文。
+from app.services.user_message_service import (
+    format_user_error_detail_message,
+    format_user_error_message
+)
+
+
 # 查询单个文档状态
 # doc_id：文档 ID
 def get_document_status(doc_id: int):
@@ -87,6 +95,7 @@ def list_documents():
         # 一次读取任务日志，补充最近一次可用的 chunk 数量。
         doc_ids = [doc.id for doc in docs]
         chunk_count_by_doc_id = {}
+        error_message_by_doc_id = {}
 
         if doc_ids:
             logs = (
@@ -103,6 +112,14 @@ def list_documents():
                 ):
                     chunk_count_by_doc_id[log.doc_id] = log.chunk_count
 
+                if (
+                    log.doc_id not in error_message_by_doc_id
+                    and log.error_message
+                ):
+                    error_message_by_doc_id[log.doc_id] = format_user_error_message(
+                        log.error_message
+                    )
+
         # 创建结果列表
         result = []
 
@@ -115,7 +132,8 @@ def list_documents():
                 "file_name": doc.file_name,
                 "status": doc.status,
                 "created_at": doc.created_at,
-                "chunk_count": chunk_count_by_doc_id.get(doc.id)
+                "chunk_count": chunk_count_by_doc_id.get(doc.id),
+                "error_message": error_message_by_doc_id.get(doc.id)
             })
 
         # 返回文档列表
@@ -232,7 +250,21 @@ def get_document_task_logs(doc_id: int):
         )
 
         # 返回日志列表
-        return logs
+        # 这里返回字典而不是 ORM 对象，是为了对外隐藏 Python 原始异常。
+        return [
+            {
+                "id": log.id,
+                "doc_id": log.doc_id,
+                "task_name": log.task_name,
+                "status": log.status,
+                "message": log.message,
+                "chunk_count": log.chunk_count,
+                "error_message": format_user_error_detail_message(log.error_message),
+                "created_at": log.created_at,
+                "updated_at": log.updated_at,
+            }
+            for log in logs
+        ]
 
     # 无论成功还是失败，最后都关闭数据库会话
     finally:

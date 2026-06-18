@@ -65,6 +65,56 @@ def parse_pdf(content: bytes) -> str:
     return full_text
 
 
+# 解析 Word .docx 文本
+# content：Word 文件二进制内容
+def parse_docx(content: bytes) -> str:
+
+    # 延迟导入 python-docx
+    # 作用：只有解析 Word 时才加载依赖
+    from docx import Document as DocxDocument
+
+    # 把 bytes 包装成文件流
+    # 作用：python-docx 可以直接读取类文件对象
+    docx_stream = BytesIO(content)
+
+    # 创建 Word 文档对象
+    document = DocxDocument(docx_stream)
+
+    # 创建文本片段列表
+    parts = []
+
+    # 提取段落文本
+    for paragraph in document.paragraphs:
+        text = paragraph.text.strip()
+        if text:
+            parts.append(text)
+
+    # 提取表格文本
+    for table in document.tables:
+        for row in table.rows:
+            cells = []
+            for cell in row.cells:
+                cell_text = " ".join(
+                    line.strip()
+                    for line in cell.text.splitlines()
+                    if line.strip()
+                )
+                if cell_text:
+                    cells.append(cell_text)
+            if cells:
+                parts.append(" | ".join(cells))
+
+    # 拼接全文
+    full_text = "\n".join(parts)
+
+    # 如果 Word 没有提取到有效文本，给出中文错误
+    if not full_text.strip():
+        raise ValueError("Word 文档未提取到有效文本。")
+
+    # 返回 Word 全文
+    return full_text
+
+
 # 根据文件名和文件内容自动解析文本
 # file_name：文件名
 # content：文件二进制内容
@@ -73,10 +123,10 @@ def parse_document_content(file_name: str, content: bytes) -> str:
     # 获取文件后缀，并转成小写
     suffix = Path(file_name).suffix.lower()
 
-    # 如果是 txt 文件
-    if suffix == ".txt":
+    # 如果是 txt 或 markdown 文件
+    if suffix in {".txt", ".md"}:
 
-        # 调用 txt 解析函数
+        # 调用文本解析函数
         return parse_txt(content)
 
     # 如果是 pdf 文件
@@ -85,5 +135,11 @@ def parse_document_content(file_name: str, content: bytes) -> str:
         # 调用 PDF 解析函数
         return parse_pdf(content)
 
+    # 如果是 Word .docx 文件
+    if suffix == ".docx":
+
+        # 调用 Word 解析函数
+        return parse_docx(content)
+
     # 如果是不支持的文件类型，直接报错
-    raise ValueError(f"暂不支持的文件类型: {suffix}")
+    raise ValueError(f"暂不支持的文件类型：{suffix}")

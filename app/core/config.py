@@ -101,10 +101,24 @@ class Settings:
     )
 
     # MinIO 存储桶名称
-    # 用于保存用户上传的 PDF/TXT 原始文件
+    # 用于保存用户上传的 PDF/TXT/Markdown/Word 原始文件
     MINIO_BUCKET_NAME: str = get_optional_env(
         "MINIO_BUCKET_NAME",
         "rag-docs"
+    )
+
+    # 单个上传文件大小上限，默认 20 MB
+    # 作用：避免本地演示环境一次性读入过大的文件
+    MAX_UPLOAD_FILE_SIZE_MB: int = get_optional_int_env(
+        "MAX_UPLOAD_FILE_SIZE_MB",
+        20
+    )
+
+    # 批量上传一次最多接收的文件数量
+    # 作用：让每轮批量任务保持可观测，避免误拖过多文件
+    BATCH_UPLOAD_MAX_FILES: int = get_optional_int_env(
+        "BATCH_UPLOAD_MAX_FILES",
+        10
     )
 
     # Redis 连接地址
@@ -156,6 +170,13 @@ class Settings:
     EMBEDDING_MODEL_NAME: str = get_optional_env(
         "EMBEDDING_MODEL_NAME",
         "text-embedding-v2"
+    )
+
+    # Embedding 批量大小
+    # DashScope 对单次向量化输入数量有限制，这里默认每批最多 20 个文本块。
+    EMBEDDING_BATCH_SIZE: int = get_optional_int_env(
+        "EMBEDDING_BATCH_SIZE",
+        20
     )
 
     # 聊天模型名称

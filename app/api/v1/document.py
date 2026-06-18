@@ -15,6 +15,7 @@ from app.schemas.document import (
     DocumentStatusResponse,
     DocumentListItem,
     UploadDocumentResponse,
+    BatchUploadResponse,
     DeleteDocumentResponse,
     TaskLogItem,
     RetryDocumentResponse
@@ -31,9 +32,9 @@ from app.services.document_service import (
 )
 
 
-# 从文档入库服务中导入 upload_document
+# 从文档入库服务中导入 upload_document、batch_upload_documents
 # 作用：处理文件上传、查重、保存 MinIO、写入数据库、派发 Celery 任务
-from app.services.ingestion_service import upload_document
+from app.services.ingestion_service import upload_document, batch_upload_documents
 
 
 # 创建文档路由对象
@@ -48,6 +49,15 @@ async def upload(file: UploadFile = File(...)):
 
     # 调用文档上传业务函数
     return await upload_document(file)
+
+
+# 批量上传文档接口
+# 最终访问路径：POST /api/v1/documents/batch-upload
+@router.post("/batch-upload", response_model=BatchUploadResponse)
+async def batch_upload(files: List[UploadFile] = File(...)):
+
+    # 调用批量上传业务函数
+    return await batch_upload_documents(files)
 
 
 # 获取文档列表接口
