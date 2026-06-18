@@ -41,24 +41,6 @@ RAG Builder 的工程价值在于：它把这些“Demo 之外的问题”变成
   <img src="docs/assets/rag-demo-comparison.png" alt="RAG Builder 不只是普通 RAG Demo" width="900" />
 </p>
 
-<details>
-<summary>展开查看详细对比</summary>
-
-| 对比维度 | 典型 RAG Demo | RAG Builder |
-|---|---|---|
-| 检索方式 | 单路向量检索 | Elasticsearch 混合检索 + 可选 qwen3-rerank |
-| 文档入库 | 手动脚本导入 | FastAPI 上传 + MinIO 存储 + Celery 异步解析 |
-| 解析流程 | 一次性处理，状态不可见 | 上传、解析、切分、Embedding、入库状态可追踪 |
-| 引用溯源 | 通常没有或只返回文本 | 返回 citations / sources，支持证据卡片展示 |
-| 无依据处理 | 容易强行回答 | 低相关过滤 + 无依据拒答 |
-| 检索调试 | 基本没有 | 检索调试页可查看 chunk、score、baseline/rerank |
-| 评测体系 | 没有固定评测 | retrieval eval + answer eval 离线评测脚本 |
-| 系统状态 | 不关注依赖状态 | FastAPI、PostgreSQL、Redis、MinIO、ES、Worker 状态面板 |
-| Web 管理台 | 简单聊天框 | 知识库、文档、上传、问答、调试、评测、系统状态工作台 |
-| 工程完整度 | 能跑通问答 | 覆盖文档管理、异步任务、检索、引用、评测和可视化控制台 |
-
-</details>
-
 ## 核心能力
 
 - 文档上传与对象存储。
@@ -85,25 +67,6 @@ RAG Builder 的工程价值在于：它把这些“Demo 之外的问题”变成
   <img src="docs/assets/system-architecture.png" alt="RAG Builder 系统架构" width="900" />
 </p>
 
-```mermaid
-flowchart TD
-    User[用户 / Web 控制台] --> API[FastAPI 后端]
-    API --> PG[(PostgreSQL 元数据)]
-    API --> MinIO[(MinIO 对象存储)]
-    API --> Redis[(Redis 任务队列)]
-    Redis --> Worker[Celery Worker]
-    Worker --> Parser[文档解析 / 清洗 / 切分]
-    Parser --> Embed[DashScope Embedding]
-    Embed --> ES[(Elasticsearch 向量索引)]
-    API --> Retriever[Hybrid Retriever]
-    ES --> Retriever
-    Retriever --> Rerank[qwen3-rerank 可选]
-    Rerank --> LLM[DashScope LLM]
-    Retriever --> LLM
-    LLM --> Answer[带引用的回答]
-    Answer --> User
-```
-
 核心边界保持清晰：FastAPI 负责 HTTP 输入输出和同步业务编排，Worker 负责耗时处理，PostgreSQL 保存结构化元数据，MinIO 保存原文件，Redis 负责任务投递，Elasticsearch 保存 chunk、向量和检索元数据。
 
 ## 文档入库流水线
@@ -113,21 +76,6 @@ flowchart TD
 <p align="center">
   <img src="docs/assets/rag-pipeline.png" alt="RAG Builder 文档入库流水线" width="900" />
 </p>
-
-```mermaid
-flowchart LR
-    Upload[上传 PDF / TXT / Markdown / Word] --> Validate[校验文件名 / 后缀 / 空内容]
-    Validate --> Hash[计算 SHA-256 并查重]
-    Hash --> Object[原文件写入 MinIO]
-    Object --> Pending[PostgreSQL 创建 PENDING 记录]
-    Pending --> Queue[投递 Celery 任务]
-    Queue --> Parsing[Worker 更新 PARSING]
-    Parsing --> Parse[解析 / 清洗 / 切块]
-    Parse --> Embedding[生成 Embedding]
-    Embedding --> Index[写入 Elasticsearch]
-    Index --> Success[更新 SUCCESS 和 chunk_count]
-    Parsing --> Failed[失败时更新 FAILED 和错误原因]
-```
 
 文档状态按以下路径流转：
 
