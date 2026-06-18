@@ -1,14 +1,20 @@
 const API_BASE = "/api/v1";
+const PAGE_TITLE = "RAG Builder｜知识库工作台";
 
 const VIEW_META = {
-    dashboard: { eyebrow: "Knowledge workspace", title: "全部知识库" },
-    playground: { eyebrow: "Knowledge playground", title: "RAG 问答" },
-    documents: { eyebrow: "Knowledge assets", title: "文档集合" },
-    pipeline: { eyebrow: "Upload and processing", title: "上传解析" },
-    retrieval: { eyebrow: "Retrieval inspection", title: "检索调试" },
-    evaluation: { eyebrow: "RAG quality evaluation", title: "评测报告" },
-    health: { eyebrow: "Runtime dependencies", title: "系统状态" }
+    dashboard: { title: "全部知识库" },
+    playground: { title: "RAG 问答" },
+    documents: { title: "文档集合" },
+    pipeline: { title: "上传解析" },
+    retrieval: { title: "检索调试" },
+    evaluation: { title: "评测报告" },
+    health: { title: "系统状态" }
 };
+
+const UPLOAD_HELP_TEXT = "支持 PDF / TXT / Markdown / Word(.docx)。可一次上传多个政策文件、公告文件或项目文档。";
+const MAX_UPLOAD_FILES = 10;
+const DOCUMENT_POLLING_INTERVAL_MS = 3000;
+const DOCUMENT_POLLING_VIEWS = new Set(["dashboard", "documents", "pipeline"]);
 
 const HEALTH_GROUPS = [
     {
@@ -45,7 +51,13 @@ let latestDocuments = [];
 let latestEvaluation = null;
 let latestSystemStatus = null;
 let selectedDocumentId = null;
+let currentViewName = "dashboard";
 let fileSelectionOrigin = "documents";
+let selectedUploadItems = [];
+let uploadItemSequence = 0;
+let uploadInProgress = false;
+let documentPollingTimer = null;
+let documentPollingInFlight = false;
 let answerSequence = 0;
 let selectedAnswerId = null;
 const answerEvidenceById = new Map();
@@ -58,6 +70,7 @@ const elements = {
     chatMessages: $("chatMessages"),
     chatScroll: $("chatScroll"),
     chooseFileButton: $("chooseFileButton"),
+    clearUploadListButton: $("clearUploadListButton"),
     composerHint: $("composerHint"),
     contextBackdrop: $("contextBackdrop"),
     dashboardAskButton: $("dashboardAskButton"),
@@ -88,7 +101,6 @@ const elements = {
     evidenceStatus: $("evidenceStatus"),
     evidenceToggle: $("evidenceToggle"),
     fileInput: $("fileInput"),
-    globalEyebrow: $("globalEyebrow"),
     coreStatusBadge: $("coreStatusBadge"),
     uploadStatusBadge: $("uploadStatusBadge"),
     rerankStatusBadge: $("rerankStatusBadge"),
@@ -106,6 +118,7 @@ const elements = {
     overallHealth: $("overallHealth"),
     pipelineTaskCount: $("pipelineTaskCount"),
     pipelineTaskList: $("pipelineTaskList"),
+    pipelineAutoRefreshNotice: $("pipelineAutoRefreshNotice"),
     playgroundMode: $("playgroundMode"),
     playgroundRerank: $("playgroundRerank"),
     playgroundThreshold: $("playgroundThreshold"),
@@ -126,6 +139,7 @@ const elements = {
     runRetrievalButton: $("runRetrievalButton"),
     runtimePort: $("runtimePort"),
     selectedFileName: $("selectedFileName"),
+    selectedFileList: $("selectedFileList"),
     sidebarBackdrop: $("sidebarBackdrop"),
     sidebarHealthList: $("sidebarHealthList"),
     sidebarOverallDot: $("sidebarOverallDot"),
@@ -139,16 +153,21 @@ const elements = {
 };
 
 document.addEventListener("DOMContentLoaded", () => {
+    document.title = PAGE_TITLE;
     bindNavigation();
     bindActions();
     setView("dashboard");
     resizeQuestionInput();
+    renderSelectedFiles();
 
     Promise.allSettled([
         loadDocuments(),
         loadEvaluation(),
         loadSystemStatus()
-    ]);
+    ]).then(() => {
+        updatePipelineAutoRefreshNotice();
+        updateDocumentPolling();
+    });
 });
 
 function bindNavigation() {
@@ -221,6 +240,7 @@ function bindActions() {
     });
     elements.fileInput.addEventListener("change", handleFileSelection);
     elements.uploadButton.addEventListener("click", uploadDocument);
+    elements.clearUploadListButton.addEventListener("click", clearSelectedFiles);
     elements.knowledgeSearchInput.addEventListener("input", renderKnowledgeSearch);
     elements.defaultKnowledgeCard.addEventListener("click", () => setView("documents"));
     elements.defaultKnowledgeCard.addEventListener("keydown", (event) => {
@@ -244,15 +264,14 @@ function bindActions() {
     elements.uploadDropCard.addEventListener("drop", (event) => {
         const files = event.dataTransfer?.files;
         if (!files?.length) return;
-        elements.fileInput.files = files;
         fileSelectionOrigin = "pipeline";
-        handleFileSelection();
+        handleSelectedFiles(Array.from(files));
     });
 
-    elements.refreshDocumentsButton.addEventListener("click", loadDocuments);
+    elements.refreshDocumentsButton.addEventListener("click", () => loadDocuments());
     elements.documentSearchInput.addEventListener("input", renderDocuments);
     elements.documentStatusFilter.addEventListener("change", renderDocuments);
-    elements.refreshPipelineButton.addEventListener("click", loadRecentTaskLogs);
+    elements.refreshPipelineButton.addEventListener("click", () => loadDocuments({ refreshPipeline: true }));
     elements.runRetrievalButton.addEventListener("click", runRetrievalTest);
     elements.retrievalQueryInput.addEventListener("keydown", (event) => {
         if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
@@ -263,10 +282,13 @@ function bindActions() {
     elements.refreshEvaluationButton.addEventListener("click", loadEvaluation);
     elements.refreshHealthButton.addEventListener("click", loadSystemStatus);
     elements.sidebarRefreshStatus.addEventListener("click", loadSystemStatus);
+    document.addEventListener("visibilitychange", handleDocumentVisibilityChange);
 }
 
 function setView(viewName) {
-    const meta = VIEW_META[viewName] || VIEW_META.dashboard;
+    viewName = VIEW_META[viewName] ? viewName : "dashboard";
+    currentViewName = viewName;
+    const meta = VIEW_META[viewName];
     elements.retrievalSettings.open = false;
 
     document.querySelectorAll(".app-view").forEach((view) => {
@@ -282,7 +304,6 @@ function setView(viewName) {
         }
     });
 
-    elements.globalEyebrow.textContent = meta.eyebrow;
     elements.globalViewTitle.textContent = meta.title;
     closeSidebar();
 
@@ -301,6 +322,8 @@ function setView(viewName) {
     } else if (viewName === "playground") {
         window.setTimeout(() => elements.questionInput.focus(), 0);
     }
+    updatePipelineAutoRefreshNotice();
+    updateDocumentPolling();
 }
 
 async function fetchJson(url, options) {
@@ -313,28 +336,213 @@ async function fetchJson(url, options) {
     return response.json();
 }
 
-async function loadDocuments() {
-    elements.refreshDocumentsButton.disabled = true;
-    elements.documentsList.replaceChildren(
-        createEmptyPanel("正在加载文档列表...")
-    );
+async function loadDocuments(options = {}) {
+    const config = options && !("target" in options) ? options : {};
+    const silent = Boolean(config.silent);
+    const suppressError = Boolean(config.suppressError);
+    const refreshPipeline = Boolean(config.refreshPipeline);
+
+    if (!silent) {
+        elements.refreshDocumentsButton.disabled = true;
+        if (refreshPipeline) {
+            elements.refreshPipelineButton.disabled = true;
+        }
+        elements.documentsList.replaceChildren(
+            createEmptyPanel("正在加载文档列表...")
+        );
+    }
 
     try {
         const data = await fetchJson(`${API_BASE}/documents/`);
         latestDocuments = normalizeArray(data)
             .map(normalizeDocument)
             .sort((left, right) => dateValue(right.createdAt) - dateValue(left.createdAt));
+        syncSelectedUploadItemsWithDocuments();
+        renderSelectedFiles();
         renderDocuments();
         renderDashboardDocuments();
+        updatePipelineAutoRefreshNotice();
+        updateDocumentPolling();
+        if (refreshPipeline && currentViewName === "pipeline") {
+            loadRecentTaskLogs({ silent: true, suppressError: true });
+        }
         return latestDocuments;
     } catch (error) {
-        latestDocuments = [];
-        renderDocuments();
-        renderDashboardDocuments();
-        showError(`文档列表加载失败：${getFriendlyError(error)}`);
-        return [];
+        if (!silent) {
+            latestDocuments = [];
+            renderDocuments();
+            renderDashboardDocuments();
+            updatePipelineAutoRefreshNotice();
+        }
+        if (silent || suppressError) {
+            console.warn("文档状态自动刷新失败", error);
+        } else {
+            showError(`文档列表加载失败：${getFriendlyError(error)}`);
+        }
+        return latestDocuments;
     } finally {
-        elements.refreshDocumentsButton.disabled = false;
+        if (!silent) {
+            elements.refreshDocumentsButton.disabled = false;
+            if (refreshPipeline) {
+                elements.refreshPipelineButton.disabled = false;
+            }
+        }
+    }
+}
+
+function hasPendingDocuments(documents = latestDocuments) {
+    return documents.some((doc) => isDocumentProcessingStatus(doc.status));
+}
+
+function isDocumentProcessingStatus(status) {
+    return ["PENDING", "PARSING"].includes(String(status || "").toUpperCase());
+}
+
+function isUploadProcessingStatus(status) {
+    return ["PENDING", "PARSING", "UPLOADING"].includes(String(status || "").toUpperCase());
+}
+
+function shouldPollDocuments() {
+    return DOCUMENT_POLLING_VIEWS.has(currentViewName)
+        && (hasPendingDocuments() || hasTrackableUploadParsingItems())
+        && !document.hidden;
+}
+
+function hasTrackableUploadParsingItems() {
+    return selectedUploadItems.some((item) => (
+        isMeaningful(item.documentId)
+        && isDocumentProcessingStatus(item.status)
+    ));
+}
+
+function startDocumentPolling() {
+    if (documentPollingTimer || document.hidden) {
+        return;
+    }
+
+    documentPollingTimer = window.setInterval(pollDocumentsOnce, DOCUMENT_POLLING_INTERVAL_MS);
+}
+
+function stopDocumentPolling() {
+    if (!documentPollingTimer) {
+        return;
+    }
+
+    window.clearInterval(documentPollingTimer);
+    documentPollingTimer = null;
+}
+
+function updateDocumentPolling() {
+    if (shouldPollDocuments()) {
+        startDocumentPolling();
+    } else {
+        stopDocumentPolling();
+    }
+}
+
+async function pollDocumentsOnce() {
+    if (documentPollingInFlight || document.hidden) {
+        return;
+    }
+    if (!DOCUMENT_POLLING_VIEWS.has(currentViewName)) {
+        stopDocumentPolling();
+        return;
+    }
+
+    documentPollingInFlight = true;
+    try {
+        await loadDocuments({
+            silent: true,
+            suppressError: true,
+            refreshPipeline: currentViewName === "pipeline"
+        });
+        if (!hasPendingDocuments() && !hasTrackableUploadParsingItems()) {
+            stopDocumentPolling();
+        }
+    } catch (error) {
+        console.warn("文档状态轮询失败", error);
+    } finally {
+        documentPollingInFlight = false;
+    }
+}
+
+function handleDocumentVisibilityChange() {
+    if (document.hidden) {
+        stopDocumentPolling();
+        return;
+    }
+
+    updateDocumentPolling();
+    if (DOCUMENT_POLLING_VIEWS.has(currentViewName) && (hasPendingDocuments() || hasTrackableUploadParsingItems())) {
+        pollDocumentsOnce();
+    }
+}
+
+function syncSelectedUploadItemsWithDocuments() {
+    if (!selectedUploadItems.length) {
+        return;
+    }
+
+    const documentsById = new Map(
+        latestDocuments
+            .filter((doc) => isMeaningful(doc.docId))
+            .map((doc) => [String(doc.docId), doc])
+    );
+
+    selectedUploadItems = selectedUploadItems.map((item) => {
+        if (!isMeaningful(item.documentId)) {
+            return item;
+        }
+
+        const doc = documentsById.get(String(item.documentId));
+        if (!doc) {
+            return item;
+        }
+
+        return {
+            ...item,
+            status: doc.status,
+            message: getDocumentProcessingMessage(doc)
+        };
+    });
+}
+
+function getDocumentProcessingMessage(doc) {
+    if (doc.status === "SUCCESS") return "解析成功";
+    if (doc.status === "FAILED") return formatUserMessage(doc.errorMessage || "解析失败");
+    if (doc.status === "PARSING") return "后台正在解析";
+    if (doc.status === "PENDING") return "等待后台解析";
+    return "状态已更新";
+}
+
+function updatePipelineAutoRefreshNotice() {
+    if (!elements.pipelineAutoRefreshNotice) {
+        return;
+    }
+
+    const hasUploads = selectedUploadItems.length > 0;
+    const hasDocuments = latestDocuments.length > 0;
+    const hasProcessing = hasPendingDocuments()
+        || selectedUploadItems.some((item) => isUploadProcessingStatus(item.status));
+    const hasFailed = latestDocuments.some((doc) => doc.status === "FAILED")
+        || selectedUploadItems.some((item) => String(item.status || "").toUpperCase() === "FAILED");
+
+    elements.pipelineAutoRefreshNotice.className = "pipeline-refresh-notice";
+    if (!hasUploads && !hasDocuments) {
+        elements.pipelineAutoRefreshNotice.classList.add("hidden");
+        elements.pipelineAutoRefreshNotice.textContent = "";
+        return;
+    }
+
+    if (hasProcessing) {
+        elements.pipelineAutoRefreshNotice.classList.add("info");
+        elements.pipelineAutoRefreshNotice.textContent = "后台解析中，状态将自动刷新";
+    } else if (hasFailed) {
+        elements.pipelineAutoRefreshNotice.classList.add("warning");
+        elements.pipelineAutoRefreshNotice.textContent = "部分文件解析失败，可查看失败原因后重试";
+    } else {
+        elements.pipelineAutoRefreshNotice.classList.add("success");
+        elements.pipelineAutoRefreshNotice.textContent = "解析任务已完成";
     }
 }
 
@@ -366,7 +574,7 @@ function renderDocuments() {
                 ? createActionEmptyPanel(
                     "icon-file",
                     "知识库还没有文档",
-                    "上传 PDF 或 TXT 后，文档状态和 chunk 数量会显示在这里。",
+                    "上传 PDF、TXT、Markdown 或 Word(.docx) 后，文档状态和 chunk 数量会显示在这里。",
                     "导入第一份文档",
                     "pipeline"
                 )
@@ -407,6 +615,11 @@ function renderDocuments() {
                 isMeaningful(doc.docId) ? `doc_id ${doc.docId}` : "doc_id 暂无"
             )
         );
+        if (doc.status === "FAILED" && isMeaningful(doc.errorMessage)) {
+            file.appendChild(
+                createTextElement("div", "document-error", truncate(formatUserMessage(doc.errorMessage), 120))
+            );
+        }
 
         const actions = document.createElement("div");
         actions.className = "document-actions";
@@ -458,7 +671,7 @@ function renderDashboardDocuments() {
         elements.knowledgeStatusBadge.textContent = "待导入";
     } else if (hasFailed) {
         elements.knowledgeStatusBadge.className = "status-badge warning";
-        elements.knowledgeStatusBadge.textContent = "部分异常";
+        elements.knowledgeStatusBadge.textContent = "部分文档失败";
     } else if (hasProcessing) {
         elements.knowledgeStatusBadge.className = "status-badge info";
         elements.knowledgeStatusBadge.textContent = "解析中";
@@ -541,15 +754,19 @@ function renderDocumentDetail() {
 
     const list = document.createElement("div");
     list.className = "detail-list";
-    [
+    const detailRows = [
         ["文件名", doc.fileName],
         ["文档 ID", doc.docId],
         ["文件类型", doc.type],
         ["文件大小", formatFileSize(doc.fileSize)],
         ["解析状态", getDocumentStatusText(doc.status)],
-        ["Chunks", isMeaningful(doc.chunkCount) ? doc.chunkCount : "暂无统计"],
+        ["分块数", isMeaningful(doc.chunkCount) ? doc.chunkCount : "暂无统计"],
         ["上传时间", formatDate(doc.createdAt)]
-    ].forEach(([label, value]) => {
+    ];
+    if (doc.status === "FAILED" && isMeaningful(doc.errorMessage)) {
+        detailRows.push(["失败原因", formatUserMessage(doc.errorMessage, "detail")]);
+    }
+    detailRows.forEach(([label, value]) => {
         const row = document.createElement("div");
         row.className = "detail-row";
         row.append(
@@ -577,63 +794,217 @@ function renderDocumentDetail() {
 }
 
 function handleFileSelection() {
-    const file = elements.fileInput.files && elements.fileInput.files[0];
-    elements.selectedFileName.textContent = file
-        ? `${file.name} · ${formatFileSize(file.size)}`
-        : "支持 PDF、TXT；上传后由 Celery 异步解析。";
+    handleSelectedFiles(Array.from(elements.fileInput.files || []));
+}
 
-    if (file && fileSelectionOrigin === "playground") {
+function handleSelectedFiles(files) {
+    if (!files.length) {
+        return;
+    }
+
+    if (files.length > MAX_UPLOAD_FILES) {
+        showError(`一次最多选择 ${MAX_UPLOAD_FILES} 个文件。`);
+        return;
+    }
+
+    selectedUploadItems = files.map((file) => ({
+        id: `upload-${++uploadItemSequence}`,
+        file,
+        status: "READY",
+        documentId: null,
+        taskId: null,
+        message: "等待上传"
+    }));
+    renderSelectedFiles();
+    elements.uploadResult.textContent = `已选择 ${selectedUploadItems.length} 个文件，准备上传。`;
+
+    if (fileSelectionOrigin === "playground") {
         uploadDocument();
     }
 }
 
-async function uploadDocument() {
-    const file = elements.fileInput.files && elements.fileInput.files[0];
+function clearSelectedFiles() {
+    if (uploadInProgress) {
+        return;
+    }
 
-    if (!file) {
-        showError("请先选择一个 PDF 或 TXT 文档。");
+    selectedUploadItems = [];
+    elements.fileInput.value = "";
+    elements.uploadResult.textContent = "尚未选择文件。";
+    renderSelectedFiles();
+}
+
+function renderSelectedFiles() {
+    const hasFiles = selectedUploadItems.length > 0;
+    const totalSize = selectedUploadItems.reduce((sum, item) => sum + Number(item.file?.size || 0), 0);
+    elements.selectedFileName.textContent = hasFiles
+        ? `${selectedUploadItems.length} 个文件待处理 · ${formatFileSize(totalSize)}`
+        : UPLOAD_HELP_TEXT;
+
+    elements.selectedFileList.innerHTML = "";
+    if (!hasFiles) {
+        updateUploadButtons();
+        updatePipelineAutoRefreshNotice();
+        updateDocumentPolling();
+        return;
+    }
+
+    selectedUploadItems.forEach((item) => {
+        const row = document.createElement("article");
+        row.className = `upload-file-item ${getUploadItemStatusClass(item.status)}`;
+
+        const main = document.createElement("div");
+        main.className = "upload-file-main";
+        main.append(
+            createTextElement("strong", "", item.file.name),
+            createTextElement(
+                "span",
+                "",
+                `${getFileType(item.file.name)} · ${formatFileSize(item.file.size)}`
+            )
+        );
+
+        const meta = document.createElement("div");
+        meta.className = "upload-file-meta";
+        meta.appendChild(
+            createStatusBadge(getUploadItemStatusText(item.status), getUploadItemStatusClass(item.status))
+        );
+
+        row.append(main, meta);
+        row.appendChild(
+            createTextElement("p", "upload-file-message", getUploadItemDisplayMessage(item))
+        );
+        if (isMeaningful(item.documentId) || isMeaningful(item.taskId)) {
+            row.appendChild(createUploadDebugDetails(item));
+        }
+        elements.selectedFileList.appendChild(row);
+    });
+    updateUploadButtons();
+    updatePipelineAutoRefreshNotice();
+    updateDocumentPolling();
+}
+
+async function uploadDocument() {
+    if (!selectedUploadItems.length) {
+        showError("请先选择 PDF、TXT、Markdown 或 Word(.docx) 文档。");
         return;
     }
 
     const formData = new FormData();
-    formData.append("file", file);
-    setUploadLoading(true, file.name);
+    selectedUploadItems.forEach((item) => {
+        formData.append("files", item.file);
+        item.status = "UPLOADING";
+        item.message = "正在上传";
+        item.documentId = null;
+        item.taskId = null;
+    });
+    setUploadLoading(true);
 
     try {
-        const data = await fetchJson(`${API_BASE}/documents/upload`, {
+        const data = await fetchJson(`${API_BASE}/documents/batch-upload`, {
             method: "POST",
             body: formData
         });
-        renderKeyValues(elements.uploadResult, [
-            ["doc_id", firstMeaningful(data.doc_id, data.id)],
-            ["文件", firstMeaningful(data.file_name, file.name)],
-            ["状态", getDocumentStatusText(firstMeaningful(data.status, "PENDING"))],
-            ["说明", firstMeaningful(data.msg, data.message, "已加入解析队列")]
-        ]);
-        elements.composerHint.textContent = `${file.name} 已加入异步解析队列`;
-        showNotice("文档上传成功，解析任务已派发。");
+        const resultItems = normalizeArray(data?.items);
+        selectedUploadItems = selectedUploadItems.map((item, index) => {
+            const result = resultItems[index] || {};
+            return {
+                ...item,
+                status: String(result.status || "UNKNOWN").toUpperCase(),
+                documentId: firstMeaningful(result.document_id, result.doc_id),
+                taskId: result.task_id || null,
+                message: formatUserMessage(firstMeaningful(result.message, result.msg, "已提交解析"))
+            };
+        });
+        renderSelectedFiles();
+        renderBatchUploadResult(data);
+        elements.composerHint.textContent = `上传完成：接收 ${data.accepted || 0} 个，失败 ${data.failed || 0} 个`;
+        showNotice(`批量上传完成：接收 ${data.accepted || 0} 个，失败 ${data.failed || 0} 个。`);
         elements.fileInput.value = "";
-        elements.selectedFileName.textContent = "支持 PDF、TXT；上传后由 Celery 异步解析。";
-        await loadDocuments();
+        await loadDocuments({ refreshPipeline: currentViewName === "pipeline" });
     } catch (error) {
-        elements.uploadResult.textContent = `上传失败：${getFriendlyError(error)}`;
+        const message = formatUserMessage(getFriendlyError(error));
+        selectedUploadItems = selectedUploadItems.map((item) => ({
+            ...item,
+            status: "FAILED",
+            message
+        }));
+        renderSelectedFiles();
+        elements.uploadResult.textContent = `上传失败：${message}`;
         elements.composerHint.textContent = "文档上传失败";
-        showError(`文档上传失败：${getFriendlyError(error)}`);
+        showError(`文档上传失败：${message}`);
     } finally {
         setUploadLoading(false);
     }
 }
 
-function setUploadLoading(isLoading, fileName = "") {
-    elements.uploadButton.disabled = isLoading;
-    elements.chooseFileButton.disabled = isLoading;
-    elements.attachmentButton.disabled = isLoading;
+function renderBatchUploadResult(data) {
+    renderKeyValues(elements.uploadResult, [
+        ["总数", firstMeaningful(data?.total, selectedUploadItems.length)],
+        ["已接收", firstMeaningful(data?.accepted, 0)],
+        ["失败", firstMeaningful(data?.failed, 0)],
+        ["说明", "每个文件的处理结果已显示在列表中"]
+    ]);
+}
+
+function createUploadDebugDetails(item) {
+    const details = document.createElement("details");
+    details.className = "upload-debug-details";
+    const summary = document.createElement("summary");
+    summary.textContent = "查看详情";
+
+    const debug = document.createElement("div");
+    debug.className = "upload-debug-grid";
+    if (isMeaningful(item.documentId)) {
+        debug.append(
+            createTextElement("span", "", "document_id"),
+            createTextElement("code", "", String(item.documentId))
+        );
+    }
+    if (isMeaningful(item.taskId)) {
+        debug.append(
+            createTextElement("span", "", "task_id"),
+            createTextElement("code", "", String(item.taskId))
+        );
+    }
+
+    details.append(summary, debug);
+    return details;
+}
+
+function getUploadItemDisplayMessage(item) {
+    const status = String(item.status || "").toUpperCase();
+    if (status === "PENDING") return "等待后台解析";
+    if (status === "SUCCESS") return "解析成功";
+    if (status === "FAILED") return formatUserMessage(item.message || "解析失败");
+    if (status === "PARSING") return "后台正在解析";
+    if (status === "UPLOADING") return "正在上传";
+    return formatUserMessage(item.message || "等待上传");
+}
+
+function setUploadLoading(isLoading) {
+    uploadInProgress = isLoading;
+    selectedUploadItems = selectedUploadItems.map((item) => ({
+        ...item,
+        status: isLoading && item.status === "READY" ? "UPLOADING" : item.status,
+        message: isLoading && item.status === "READY" ? "正在上传" : item.message
+    }));
     elements.uploadButton.textContent = isLoading ? "上传中..." : "上传并解析";
 
     if (isLoading) {
-        elements.uploadResult.textContent = `正在上传 ${fileName}...`;
-        elements.composerHint.textContent = `正在上传 ${fileName}...`;
+        const count = selectedUploadItems.length;
+        elements.uploadResult.textContent = `正在上传 ${count} 个文件...`;
+        elements.composerHint.textContent = `正在上传 ${count} 个文件...`;
     }
+    renderSelectedFiles();
+}
+
+function updateUploadButtons() {
+    const hasFiles = selectedUploadItems.length > 0;
+    elements.uploadButton.disabled = uploadInProgress || !hasFiles;
+    elements.clearUploadListButton.disabled = uploadInProgress || !hasFiles;
+    elements.chooseFileButton.disabled = uploadInProgress;
+    elements.attachmentButton.disabled = uploadInProgress;
 }
 
 async function retryDocument(docId) {
@@ -648,7 +1019,7 @@ async function retryDocument(docId) {
             { method: "POST" }
         );
         showNotice(data.message || `文档 ${docId} 已重新加入解析队列。`);
-        await loadDocuments();
+        await loadDocuments({ refreshPipeline: currentViewName === "pipeline" });
     } catch (error) {
         showError(`重新解析失败：${getFriendlyError(error)}`);
     }
@@ -682,15 +1053,21 @@ async function deleteDocument(docId, fileName) {
     }
 }
 
-async function loadRecentTaskLogs() {
-    elements.refreshPipelineButton.disabled = true;
-    elements.pipelineTaskList.replaceChildren(
-        createEmptyPanel("正在读取最近解析任务...")
-    );
+async function loadRecentTaskLogs(options = {}) {
+    const config = options && !("target" in options) ? options : {};
+    const silent = Boolean(config.silent);
+    const suppressError = Boolean(config.suppressError);
+
+    if (!silent) {
+        elements.refreshPipelineButton.disabled = true;
+        elements.pipelineTaskList.replaceChildren(
+            createEmptyPanel("正在读取最近解析任务...")
+        );
+    }
 
     try {
         if (latestDocuments.length === 0) {
-            await loadDocuments();
+            await loadDocuments({ silent, suppressError: true });
         }
 
         const candidates = latestDocuments.slice(0, 8);
@@ -717,10 +1094,18 @@ async function loadRecentTaskLogs() {
             .slice(0, 20);
         renderPipelineLogs(logs);
     } catch (error) {
-        renderPipelineLogs([]);
-        showError(`解析任务读取失败：${getFriendlyError(error)}`);
+        if (!silent) {
+            renderPipelineLogs([]);
+        }
+        if (silent || suppressError) {
+            console.warn("解析任务自动刷新失败", error);
+        } else {
+            showError(`解析任务读取失败：${getFriendlyError(error)}`);
+        }
     } finally {
-        elements.refreshPipelineButton.disabled = false;
+        if (!silent) {
+            elements.refreshPipelineButton.disabled = false;
+        }
     }
 }
 
@@ -748,7 +1133,7 @@ function renderPipelineLogs(logs) {
             createTextElement(
                 "span",
                 "pipeline-error",
-                String(log.error_message || log.message || "暂无补充信息")
+                formatUserMessage(log.error_message || log.message || "暂无补充信息")
             )
         );
         elements.pipelineTaskList.appendChild(row);
@@ -851,8 +1236,10 @@ function createAssistantMessage() {
     head.className = "assistant-head";
     const identity = document.createElement("div");
     identity.className = "assistant-identity";
+    const avatar = createTextElement("span", "assistant-avatar", "");
+    avatar.appendChild(createSvgIcon("icon-chat"));
     identity.append(
-        createTextElement("span", "assistant-avatar", "RB"),
+        avatar,
         createTextElement("span", "", "RAG Builder")
     );
     const state = createTextElement("span", "answer-state loading", "生成中");
@@ -1049,11 +1436,11 @@ function getSourceSubtitle(source, index) {
 
 function getSourceScoreEntries(source) {
     return [
-        ["Score", source.score],
-        ["Hybrid", source.hybridScore],
-        ["Vector", source.vectorScore],
-        ["Keyword", source.keywordScore],
-        ["Rerank", source.rerankScore]
+        ["分数", source.score],
+        ["混合分", source.hybridScore],
+        ["向量", source.vectorScore],
+        ["关键词", source.keywordScore],
+        ["重排", source.rerankScore]
     ].filter(([, value]) => isMeaningful(value) && Number.isFinite(Number(value)));
 }
 
@@ -1087,12 +1474,12 @@ async function runRetrievalTest() {
     elements.runRetrievalButton.disabled = true;
     elements.runRetrievalButton.classList.add("is-loading");
     elements.retrievalResults.replaceChildren(
-        createEmptyPanel("正在执行 Embedding 与 Hybrid 检索...")
+        createEmptyPanel("正在执行向量化与混合检索...")
     );
     elements.retrievalLatency.textContent = "运行中";
-    elements.retrievalRerankStatus.textContent = useRerank ? "尝试 Rerank" : "使用基础检索";
+    elements.retrievalRerankStatus.textContent = useRerank ? "尝试重排" : "使用基础检索";
     elements.retrievalModeHint.textContent = useRerank
-        ? "已请求二次重排，完成后将展示 Baseline Rank 与 Rerank Rank 对比。"
+        ? "已请求二次重排，完成后将展示基础排序与重排排序对比。"
         : "当前使用基础检索，未启用二次重排。";
 
     try {
@@ -1134,7 +1521,7 @@ function renderRetrievalResults(data) {
         : getRerankStatusText(rerankStatus);
     elements.retrievalLatency.textContent = `${formatNumber(data?.latency_ms, 2)} ms`;
     if (isMeaningful(data?.rerank_latency_ms)) {
-        elements.retrievalLatency.title = `Rerank ${formatNumber(data.rerank_latency_ms, 2)} ms`;
+        elements.retrievalLatency.title = `重排耗时 ${formatNumber(data.rerank_latency_ms, 2)} ms`;
     } else {
         elements.retrievalLatency.removeAttribute("title");
     }
@@ -1144,7 +1531,7 @@ function renderRetrievalResults(data) {
         data?.rerank_error
     ].filter(isMeaningful).join(" ");
     elements.retrievalModeHint.textContent = rerankStatus === "enabled"
-        ? "已启用二次重排，可对照 Baseline Rank 与 Rerank Rank。"
+        ? "已启用二次重排，可对照基础排序与重排排序。"
         : rerankStatus === "fallback"
             ? "二次重排调用失败，当前展示基础检索结果。"
             : "当前使用基础检索，未启用二次重排。";
@@ -1155,7 +1542,7 @@ function renderRetrievalResults(data) {
         const notice = createTextElement(
             "div",
             "retrieval-status-note warning",
-            "Rerank 调用失败，已回退到原始检索排序。"
+            "重排调用失败，已回退到原始检索排序。"
         );
         notice.setAttribute("role", "status");
         elements.retrievalResults.appendChild(notice);
@@ -1182,7 +1569,7 @@ function renderRetrievalResults(data) {
             createTextElement(
                 "span",
                 "retrieval-rank",
-                `Baseline Rank ${item.baseline_rank || item.rank || index + 1}`
+                `基础排序 ${item.baseline_rank || item.rank || index + 1}`
             )
         );
         if (isMeaningful(item.rerank_rank)) {
@@ -1190,7 +1577,7 @@ function renderRetrievalResults(data) {
                 createTextElement(
                     "span",
                     "retrieval-rank rerank",
-                    `Rerank Rank ${item.rerank_rank}`
+                    `重排排序 ${item.rerank_rank}`
                 )
             );
         }
@@ -1200,7 +1587,7 @@ function renderRetrievalResults(data) {
             createTextElement(
                 "span",
                 "source-score",
-                isMeaningful(item.score) ? formatScore(item.score) : "score -"
+                isMeaningful(item.score) ? formatScore(item.score) : "分数 -"
             )
         );
 
@@ -1214,11 +1601,11 @@ function renderRetrievalResults(data) {
 
         const scores = document.createElement("div");
         scores.className = "score-strip";
-        appendScoreIfPresent(scores, "Score", item.score);
-        appendScoreIfPresent(scores, "Hybrid", item.hybrid_score);
-        appendScoreIfPresent(scores, "Vector", item.vector_score);
-        appendScoreIfPresent(scores, "Keyword", item.keyword_score);
-        appendScoreIfPresent(scores, "Rerank", item.rerank_score);
+        appendScoreIfPresent(scores, "分数", item.score);
+        appendScoreIfPresent(scores, "混合分", item.hybrid_score);
+        appendScoreIfPresent(scores, "向量", item.vector_score);
+        appendScoreIfPresent(scores, "关键词", item.keyword_score);
+        appendScoreIfPresent(scores, "重排", item.rerank_score);
 
         body.append(meta);
         if (scores.childElementCount) body.appendChild(scores);
@@ -1286,13 +1673,13 @@ function renderDashboardEvaluation(data) {
     const answer = data?.answer || {};
     const baseline = retrieval?.baseline || {};
     const values = [
-        ["Hit Rate", formatPercent(baseline.hit_rate_at_k)],
-        ["Recall", formatPercent(baseline.recall_at_k)],
-        ["Precision", formatPercent(baseline.precision_at_k)],
+        ["命中率", formatPercent(baseline.hit_rate_at_k)],
+        ["召回率", formatPercent(baseline.recall_at_k)],
+        ["精确率", formatPercent(baseline.precision_at_k)],
         ["MRR", formatPercent(baseline.mrr)],
-        ["Claim Hit", formatPercent(answer.expected_claim_hit_rate)],
+        ["断言命中", formatPercent(answer.expected_claim_hit_rate)],
         [
-            "Unsupported",
+            "弱依据",
             isMeaningful(answer.unsupported_claim_count)
                 ? String(answer.unsupported_claim_count)
                 : "-"
@@ -1591,16 +1978,16 @@ function renderSidebarHealth(components, apiPort) {
 function getFastApiRuntimeLabel(apiPort) {
     const currentPort = window.location.port;
     if (currentPort) {
-        return `FastAPI :${currentPort}`;
+        return `FastAPI 端口 ${currentPort}`;
     }
     if (isMeaningful(apiPort)) {
-        return `FastAPI :${apiPort}`;
+        return `FastAPI 端口 ${apiPort}`;
     }
     return "FastAPI 当前连接";
 }
 
 function renderRetrievalConfiguration(config) {
-    elements.playgroundMode.textContent = config.mode || "Hybrid";
+    elements.playgroundMode.textContent = formatRetrievalMode(config.mode);
     elements.playgroundTopK.textContent = isMeaningful(config.top_k)
         ? String(config.top_k)
         : "5";
@@ -1622,6 +2009,14 @@ function renderRetrievalConfiguration(config) {
     elements.playgroundThreshold.textContent = isMeaningful(config.citation_threshold)
         ? Number(config.citation_threshold).toFixed(2)
         : "0.60";
+}
+
+function formatRetrievalMode(mode) {
+    const value = String(mode || "").trim().toLowerCase();
+    if (!value || value === "hybrid") return "混合检索";
+    if (value === "vector") return "向量检索";
+    if (value === "keyword") return "关键词检索";
+    return String(mode);
 }
 
 function setDashboardRerankState(status, model) {
@@ -1732,7 +2127,8 @@ function normalizeDocument(doc) {
         status: String(doc?.status || "UNKNOWN").toUpperCase(),
         createdAt: firstMeaningful(doc?.created_at, doc?.createdAt),
         chunkCount: firstMeaningful(doc?.chunk_count, doc?.chunkCount),
-        fileSize: firstMeaningful(doc?.file_size, doc?.fileSize, doc?.size)
+        fileSize: firstMeaningful(doc?.file_size, doc?.fileSize, doc?.size),
+        errorMessage: formatUserMessage(firstMeaningful(doc?.error_message, doc?.errorMessage))
     };
 }
 
@@ -1993,9 +2389,9 @@ function getComponentName(key) {
         redis: "Redis",
         elasticsearch: "Elasticsearch",
         celery: "解析 Worker",
-        embedding: "Embedding Model",
+        embedding: "Embedding 模型",
         llm: "LLM",
-        rerank: "Rerank Model"
+        rerank: "重排模型"
     }[key] || key;
 }
 
@@ -2013,7 +2409,27 @@ function getDocumentStatusText(status) {
     if (value === "SUCCESS") return "解析成功";
     if (value === "FAILED") return "解析失败";
     if (value === "PARSING") return "解析中";
-    if (value === "PENDING") return "待解析";
+    if (value === "PENDING") return "等待后台解析";
+    return "状态未知";
+}
+
+function getUploadItemStatusClass(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "FAILED") return "danger";
+    if (value === "SUCCESS") return "success";
+    if (["PENDING", "PARSING", "UPLOADING"].includes(value)) return "info";
+    if (value === "READY") return "neutral";
+    return getDocumentStatusClass(value);
+}
+
+function getUploadItemStatusText(status) {
+    const value = String(status || "").toUpperCase();
+    if (value === "READY") return "待上传";
+    if (value === "UPLOADING") return "上传中";
+    if (value === "PENDING") return "已提交解析";
+    if (value === "SUCCESS") return "解析成功";
+    if (value === "FAILED") return "解析失败";
+    if (value === "PARSING") return "解析中";
     return "状态未知";
 }
 
@@ -2058,7 +2474,7 @@ function getDependencyStatusText(status) {
     if (value === "disabled") return "未开启";
     if (value === "optional") return "可选功能";
     if (["error", "failed", "fail"].includes(value)) return "异常";
-    if (["degraded", "warning"].includes(value)) return "部分异常";
+    if (["degraded", "warning"].includes(value)) return "部分依赖异常";
     if (value === "checking") return "检查中";
     return "未知";
 }
@@ -2080,8 +2496,8 @@ function getComponentStatusText(key, status) {
 function getOverallHealthText(status) {
     const value = String(status || "").toLowerCase();
     if (value === "ok") return "正常";
-    if (value === "degraded") return "部分异常";
-    if (value === "error") return "异常";
+    if (value === "degraded") return "部分依赖异常";
+    if (value === "error") return "系统异常";
     return "未知";
 }
 
@@ -2096,8 +2512,15 @@ function getRerankStatusText(status) {
 }
 
 function getFileType(fileName) {
-    const suffix = String(fileName).split(".").pop();
-    return suffix && suffix !== fileName ? suffix.toUpperCase() : "-";
+    const parts = String(fileName || "").split(".");
+    const suffix = parts.length > 1 ? `.${parts.pop().toLowerCase()}` : "";
+    return {
+        ".pdf": "PDF",
+        ".txt": "TXT",
+        ".md": "Markdown",
+        ".docx": "Word 文档",
+        ".doc": "Word 旧格式"
+    }[suffix] || (suffix ? suffix.slice(1).toUpperCase() : "-");
 }
 
 function firstMeaningful(...values) {
@@ -2190,6 +2613,58 @@ function getFriendlyError(error) {
         return "无法连接到本地服务";
     }
     return message;
+}
+
+function formatUserMessage(message, mode = "default") {
+    if (!isMeaningful(message)) {
+        return "";
+    }
+
+    const text = String(message);
+    const normalized = text.toLowerCase();
+    const isDocxMissing = normalized.includes("no module named 'docx'")
+        || normalized.includes('no module named "docx"')
+        || normalized.includes("缺少 word 解析依赖")
+        || normalized.includes("当前环境缺少 word 解析依赖")
+        || normalized.includes("word 解析组件未安装");
+
+    if (isDocxMissing) {
+        return mode === "detail"
+            ? "Word 解析组件未安装，请安装 python-docx 后重试。"
+            : "Word 文档解析失败：当前环境缺少 Word 解析依赖，请安装 python-docx 后重试。";
+    }
+
+    if (normalized.includes("file is not a zip file")) {
+        return "Word 文档格式无效：该文件不是标准 .docx，请用 Word/WPS 另存为 .docx 后重新上传。";
+    }
+
+    if (normalized.includes("no relationship of type")) {
+        return "Word 文档结构异常：文件可能已损坏或不是标准 .docx，请重新下载或另存为 .docx 后上传。";
+    }
+
+    if (normalized.includes("batch size is invalid")
+        || normalized.includes("internalerror.algo.invalidparameter")) {
+        return "Embedding 批量处理失败：单次向量化文本块数量超过模型限制，请启用分批处理后重试。";
+    }
+
+    if (normalized.includes("openaierror")) {
+        return "模型调用失败：Embedding 服务返回异常，请稍后重试或检查模型配置。";
+    }
+
+    if (normalized.includes("no module named")) {
+        return "文档解析失败：当前环境缺少必要依赖，请补充依赖后重试。";
+    }
+
+    if (normalized.includes("modulenotfounderror")
+        || normalized.includes("importerror")
+        || normalized.includes("filenotfounderror")
+        || normalized.includes("valueerror")
+        || normalized.includes("typeerror")
+        || normalized.includes("traceback")) {
+        return "文档处理失败，请检查文件格式或后台依赖后重试。";
+    }
+
+    return text;
 }
 
 function showError(message) {
