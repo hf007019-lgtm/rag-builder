@@ -31,6 +31,16 @@ def get_evaluation_report() -> dict:
     retrieval = retrieval if isinstance(retrieval, dict) else {}
     answer = results.get("answer")
     answer = answer if isinstance(answer, dict) else {}
+    case_set_name = (
+        results.get("case_set_name")
+        or retrieval.get("case_set_name")
+        or answer.get("case_set_name")
+    )
+    case_file = (
+        results.get("case_file")
+        or retrieval.get("case_file")
+        or answer.get("case_file")
+    )
 
     failures = []
     for section in (retrieval, answer):
@@ -45,6 +55,11 @@ def get_evaluation_report() -> dict:
     return {
         "available": available,
         "generated_at": results.get("generated_at"),
+        "case_set_name": (
+            case_set_name
+            or ("默认 RAG Builder 项目评测集" if available else None)
+        ),
+        "case_file": case_file,
         "retrieval": retrieval,
         "answer": answer,
         "failures": failures,

@@ -25,6 +25,10 @@ PROJECT_ROOT = EVALS_DIR.parent
 DEFAULT_CASES_PATH = EVALS_DIR / "cases" / "rag_retrieval_cases.json"
 REPORT_PATH = EVALS_DIR / "eval_report.md"
 RESULTS_PATH = EVALS_DIR / "eval_results.json"
+CASE_SET_NAMES = {
+    "rag_retrieval_cases.json": "默认 RAG Builder 项目评测集",
+    "exam_policy_cases.json": "公务员/事业单位政策评测集",
+}
 
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
@@ -60,6 +64,19 @@ class ExistingRagServiceAdapter:
         return self._service().ask_question(query)
 
 
+def describe_case_set(path: Path = DEFAULT_CASES_PATH) -> Dict[str, str]:
+    cases_path = Path(path)
+    try:
+        case_file = cases_path.resolve().relative_to(PROJECT_ROOT).as_posix()
+    except ValueError:
+        case_file = cases_path.as_posix()
+
+    return {
+        "case_file": case_file,
+        "case_set_name": CASE_SET_NAMES.get(cases_path.name, cases_path.stem)
+    }
+
+
 def load_cases(path: Path = DEFAULT_CASES_PATH) -> List[Dict[str, Any]]:
     """读取并做最小结构校验，防止错误 case 静默进入报告。"""
     with path.open("r", encoding="utf-8") as file:
@@ -69,9 +86,16 @@ def load_cases(path: Path = DEFAULT_CASES_PATH) -> List[Dict[str, Any]]:
         raise ValueError("评测用例文件必须是 JSON 数组")
 
     required_fields = {"id", "query", "unanswerable"}
+    normalized_cases = []
     for index, case in enumerate(cases, start=1):
         if not isinstance(case, dict):
             raise ValueError(f"第 {index} 条评测用例不是 JSON 对象")
+
+        case = dict(case)
+        if "id" not in case and case.get("case_id"):
+            case["id"] = str(case["case_id"])
+        if "query" not in case and case.get("question"):
+            case["query"] = str(case["question"])
 
         missing_fields = required_fields - set(case)
         if missing_fields:
@@ -79,8 +103,9 @@ def load_cases(path: Path = DEFAULT_CASES_PATH) -> List[Dict[str, Any]]:
             raise ValueError(
                 f"评测用例 {index} 缺少字段：{missing_text}"
             )
+        normalized_cases.append(case)
 
-    return cases
+    return normalized_cases
 
 
 def inspect_knowledge_base(timeout_seconds: float = 2.0) -> Dict[str, Any]:
@@ -404,6 +429,10 @@ def load_results_state() -> Dict[str, Any]:
 def save_report_section(section: str, data: Dict[str, Any]) -> None:
     state = load_results_state()
     state[section] = data
+    if data.get("case_set_name"):
+        state["case_set_name"] = data["case_set_name"]
+    if data.get("case_file"):
+        state["case_file"] = data["case_file"]
     state["generated_at"] = datetime.now().astimezone().isoformat(
         timespec="seconds"
     )
@@ -421,6 +450,18 @@ def render_report(state: Dict[str, Any]) -> str:
     generated_at = state.get("generated_at", "尚未运行")
     baseline = retrieval.get("baseline", {})
     rerank = retrieval.get("rerank", {})
+    case_set_name = (
+        state.get("case_set_name")
+        or retrieval.get("case_set_name")
+        or answer.get("case_set_name")
+        or CASE_SET_NAMES[DEFAULT_CASES_PATH.name]
+    )
+    case_file = (
+        state.get("case_file")
+        or retrieval.get("case_file")
+        or answer.get("case_file")
+        or describe_case_set(DEFAULT_CASES_PATH)["case_file"]
+    )
 
     lines = [
         "# RAG Builder 评测报告",
@@ -428,6 +469,11 @@ def render_report(state: Dict[str, Any]) -> str:
         "## 评测时间",
         "",
         f"- 最近更新时间：{generated_at}",
+        "",
+        "## 评测集",
+        "",
+        f"- 当前评测集：{case_set_name}",
+        f"- 用例文件：{case_file}",
         "",
         "## 检索评测",
         "",

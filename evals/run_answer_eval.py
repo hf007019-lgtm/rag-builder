@@ -10,6 +10,7 @@ from eval_utils import (
     ExistingRagServiceAdapter,
     claim_is_covered,
     count_unsupported_claims,
+    describe_case_set,
     evaluate_citation_coverage,
     inspect_knowledge_base,
     is_abstention,
@@ -22,6 +23,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="运行 RAG 答案引用评测")
     parser.add_argument(
         "--cases",
+        "--case-file",
+        dest="cases",
         type=Path,
         default=DEFAULT_CASES_PATH,
         help="评测用例 JSON 文件"
@@ -32,9 +35,11 @@ def parse_args():
 def _empty_section(
     cases: List[Dict[str, Any]],
     status: str,
-    message: str
+    message: str,
+    case_set: Dict[str, str]
 ) -> Dict[str, Any]:
     return {
+        **case_set,
         "status": status,
         "case_count": len(cases),
         "answer_case_count": 0,
@@ -55,13 +60,15 @@ def _empty_section(
 
 def run_evaluation(cases_path: Path) -> Dict[str, Any]:
     cases = load_cases(cases_path)
+    case_set = describe_case_set(cases_path)
     knowledge_base = inspect_knowledge_base()
 
     if knowledge_base["status"] != "ready":
         return _empty_section(
             cases=cases,
             status=knowledge_base["status"],
-            message=knowledge_base["message"]
+            message=knowledge_base["message"],
+            case_set=case_set
         )
 
     adapter = ExistingRagServiceAdapter()
@@ -262,6 +269,7 @@ def run_evaluation(cases_path: Path) -> Dict[str, Any]:
         )
 
     return {
+        **case_set,
         "status": "partial" if error_count else "completed",
         "case_count": len(cases),
         "answer_case_count": answer_case_count,

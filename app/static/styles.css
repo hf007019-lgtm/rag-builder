@@ -3604,6 +3604,13 @@ body {
     font-size: 10px;
 }
 
+.evaluation-case-set {
+    margin: 0 0 10px;
+    color: var(--secondary);
+    font-size: 11px;
+    font-weight: 650;
+}
+
 .health-card {
     background: #ffffff;
 }

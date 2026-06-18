@@ -91,6 +91,7 @@ const elements = {
     documentStatusFilter: $("documentStatusFilter"),
     documentsList: $("documentsList"),
     emptyState: $("emptyState"),
+    evaluationCaseSet: $("evaluationCaseSet"),
     evaluationFailureCount: $("evaluationFailureCount"),
     evaluationFailureList: $("evaluationFailureList"),
     evaluationGeneratedAt: $("evaluationGeneratedAt"),
@@ -1664,6 +1665,15 @@ function renderEvaluation(data) {
         ? formatDate(data.generated_at)
         : "尚未生成";
     elements.evaluationMessage.textContent = data?.message || "暂无评测报告。";
+    const caseSetName = getEvaluationCaseSetName(data);
+    elements.evaluationCaseSet.textContent = data?.available
+        ? `评测集：${caseSetName}`
+        : "评测集：暂无评测报告";
+    if (isMeaningful(data?.case_file)) {
+        elements.evaluationCaseSet.title = data.case_file;
+    } else {
+        elements.evaluationCaseSet.removeAttribute("title");
+    }
     renderEvaluationFailures(normalizeArray(data?.failures));
     renderDashboardEvaluation(data);
 }
@@ -1700,9 +1710,18 @@ function renderDashboardEvaluation(data) {
         ? "结果仅供参考"
         : "暂无评测数据";
     elements.dashboardEvalSource.textContent = data?.available
-        ? "当前评测集与现有知识库内容可能不匹配"
+        ? `评测集：${getEvaluationCaseSetName(data)}`
         : "暂无评测数据";
     elements.dashboardEvalFallback.classList.toggle("hidden", Boolean(data?.available));
+}
+
+function getEvaluationCaseSetName(data) {
+    return firstMeaningful(
+        data?.case_set_name,
+        data?.retrieval?.case_set_name,
+        data?.answer?.case_set_name,
+        "默认 RAG Builder 项目评测集"
+    );
 }
 
 function renderEvaluationFailures(failures) {

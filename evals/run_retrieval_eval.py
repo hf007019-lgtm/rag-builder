@@ -9,6 +9,7 @@ from eval_utils import (
     DEFAULT_CASES_PATH,
     ExistingRagServiceAdapter,
     aggregate_ranking,
+    describe_case_set,
     evaluate_ranking,
     inspect_knowledge_base,
     load_cases,
@@ -20,6 +21,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="运行 RAG 检索评测")
     parser.add_argument(
         "--cases",
+        "--case-file",
+        dest="cases",
         type=Path,
         default=DEFAULT_CASES_PATH,
         help="评测用例 JSON 文件"
@@ -49,10 +52,12 @@ def _empty_section(
     top_k: int,
     top_n: int,
     status: str,
-    message: str
+    message: str,
+    case_set: Dict[str, str]
 ) -> Dict[str, Any]:
     empty_metrics = aggregate_ranking([])
     return {
+        **case_set,
         "status": status,
         "case_count": len(cases),
         "top_k": top_k,
@@ -82,6 +87,7 @@ def run_evaluation(
     use_rerank: Optional[bool]
 ) -> Dict[str, Any]:
     cases = load_cases(cases_path)
+    case_set = describe_case_set(cases_path)
     top_k = max(1, top_k)
     top_n = max(top_k, top_n)
     knowledge_base = inspect_knowledge_base()
@@ -92,7 +98,8 @@ def run_evaluation(
             top_k=top_k,
             top_n=top_n,
             status=knowledge_base["status"],
-            message=knowledge_base["message"]
+            message=knowledge_base["message"],
+            case_set=case_set
         )
 
     try:
@@ -108,7 +115,8 @@ def run_evaluation(
             status="unavailable",
             message=(
                 f"评测依赖初始化失败：{type(exc).__name__}: {exc}"
-            )
+            ),
+            case_set=case_set
         )
 
     baseline_case_metrics = []
@@ -249,6 +257,7 @@ def run_evaluation(
     )
 
     return {
+        **case_set,
         "status": "partial" if error_count else "completed",
         "case_count": len(cases),
         "knowledge_base_chunk_count": knowledge_base["chunk_count"],
