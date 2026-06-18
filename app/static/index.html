@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="color-scheme" content="light">
-    <title>RAG Builder 知识库工作台</title>
+    <title>RAG Builder｜知识库工作台</title>
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
     <link rel="stylesheet" href="/static/styles.css">
 </head>
 <body>
@@ -69,7 +70,16 @@
     <div class="console-shell">
         <aside id="sidebar" class="navigation-shell" aria-label="产品导航">
             <div class="icon-rail">
-                <button class="rail-brand" type="button" data-view="dashboard" aria-label="RAG Builder 工作台">RB</button>
+                <button class="rail-brand" type="button" data-view="dashboard" aria-label="RAG Builder 工作台">
+                    <svg class="brand-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                        <rect class="brand-icon-bg" x="1" y="1" width="62" height="62" rx="17"></rect>
+                        <path class="brand-icon-page back" d="M18 29.5 32 22l14 7.5-14 7.5-14-7.5Z"></path>
+                        <path class="brand-icon-page middle" d="M18 38.5 32 46l14-7.5"></path>
+                        <path class="brand-icon-page front" d="M18 47.5 32 55l14-7.5"></path>
+                        <circle class="brand-icon-lens" cx="44" cy="20" r="7"></circle>
+                        <path class="brand-icon-handle" d="m49 25 5 5"></path>
+                    </svg>
+                </button>
                 <nav class="rail-nav" aria-label="主模块">
                     <button class="rail-item active" type="button" data-view="dashboard" aria-label="工作台" title="工作台">
                         <svg class="icon"><use href="#icon-dashboard"></use></svg>
@@ -96,11 +106,19 @@
 
             <div class="secondary-sidebar">
                 <div class="brand">
+                    <svg class="brand-icon brand-lockup-icon" viewBox="0 0 64 64" aria-hidden="true" focusable="false">
+                        <rect class="brand-icon-bg" x="1" y="1" width="62" height="62" rx="17"></rect>
+                        <path class="brand-icon-page back" d="M18 29.5 32 22l14 7.5-14 7.5-14-7.5Z"></path>
+                        <path class="brand-icon-page middle" d="M18 38.5 32 46l14-7.5"></path>
+                        <path class="brand-icon-page front" d="M18 47.5 32 55l14-7.5"></path>
+                        <circle class="brand-icon-lens" cx="44" cy="20" r="7"></circle>
+                        <path class="brand-icon-handle" d="m49 25 5 5"></path>
+                    </svg>
                     <div class="brand-copy">
                         <strong>RAG Builder</strong>
                         <span>知识库工作台</span>
                     </div>
-                    <span class="version-chip">Local</span>
+                    <span class="version-chip">本地</span>
                 </div>
 
                 <button id="sidebarUploadButton" class="sidebar-primary" type="button">
@@ -164,7 +182,7 @@
                 <div class="sidebar-footer">
                     <span id="sidebarOverallDot" class="status-dot unknown"></span>
                     <span id="sidebarOverallText">等待状态检查</span>
-                    <span class="runtime-port">Port <b id="runtimePort">--</b></span>
+                    <span class="runtime-port">端口 <b id="runtimePort">--</b></span>
                 </div>
             </div>
         </aside>
@@ -179,7 +197,6 @@
                         <svg class="icon"><use href="#icon-menu"></use></svg>
                     </button>
                     <div>
-                        <span id="globalEyebrow">Knowledge workspace</span>
                         <h1 id="globalViewTitle">全部知识库</h1>
                     </div>
                 </div>
@@ -208,7 +225,6 @@
                         <div class="dashboard-content">
                             <section class="dashboard-hero">
                                 <div>
-                                    <span class="section-kicker">RAG Builder Workspace</span>
                                     <h2>企业知识库工作台</h2>
                                     <p>从文档导入到检索问答，在一个清晰的工作空间里管理完整 RAG 链路。</p>
                                 </div>
@@ -227,7 +243,7 @@
                                 <div class="quick-action-grid">
                                     <button id="dashboardUploadButton" class="quick-action-card" type="button">
                                         <span class="quick-action-icon blue"><svg class="icon"><use href="#icon-upload"></use></svg></span>
-                                        <span><strong>导入知识文档</strong><small>上传 PDF / TXT，进入异步解析流水线。</small></span>
+                                        <span><strong>导入知识文档</strong><small>上传 PDF / TXT / Markdown / Word，进入异步解析流水线。</small></span>
                                         <svg class="icon quick-action-arrow"><use href="#icon-arrow"></use></svg>
                                     </button>
                                     <button id="dashboardAskButton" class="quick-action-card" type="button">
@@ -279,7 +295,7 @@
                                         <div class="knowledge-stats">
                                             <div><span>已入库文档</span><strong id="dashboardDocumentCount">-</strong></div>
                                             <div><span>已解析文档</span><strong id="dashboardSuccessCount">-</strong></div>
-                                            <div><span>Chunk 数量</span><strong id="dashboardChunkCount">-</strong></div>
+                                            <div><span>分块数量</span><strong id="dashboardChunkCount">-</strong></div>
                                         </div>
                                         <div class="knowledge-card-foot">
                                             <span>私有</span><span>RAG</span><time id="knowledgeUpdatedAt">等待数据</time>
@@ -297,11 +313,11 @@
                             <section class="dashboard-grid">
                                 <article class="content-card recent-documents-card">
                                     <div class="card-heading">
-                                        <div><span class="section-kicker">Recent documents</span><h3>最近文档</h3></div>
+                                        <div><h3>最近文档</h3></div>
                                         <button class="text-link" type="button" data-view-target="documents">查看全部</button>
                                     </div>
                                     <div class="compact-table">
-                                        <div class="compact-table-head"><span>文件名</span><span>状态</span><span>上传时间</span><span>Chunks</span></div>
+                                        <div class="compact-table-head"><span>文件名</span><span>状态</span><span>上传时间</span><span>分块数</span></div>
                                         <div id="dashboardRecentDocuments" class="compact-table-body">
                                             <div class="empty-panel">正在读取文档...</div>
                                         </div>
@@ -310,7 +326,7 @@
 
                                 <article class="content-card recent-evaluation-card">
                                     <div class="card-heading">
-                                        <div><span class="section-kicker">Latest evaluation</span><h3>最近评测</h3></div>
+                                        <div><h3>最近评测</h3></div>
                                         <button class="text-link" type="button" data-view-target="evaluation">查看报告</button>
                                     </div>
                                     <div class="evaluation-overview">
@@ -318,12 +334,12 @@
                                     </div>
                                     <p class="dashboard-evaluation-note">当前评测集与现有知识库内容可能不匹配，结果仅代表本次测试集。</p>
                                     <div id="dashboardEvalMetrics" class="mini-metric-grid">
-                                        <div><span>Hit Rate</span><strong>-</strong></div>
-                                        <div><span>Recall</span><strong>-</strong></div>
-                                        <div><span>Precision</span><strong>-</strong></div>
+                                        <div><span>命中率</span><strong>-</strong></div>
+                                        <div><span>召回率</span><strong>-</strong></div>
+                                        <div><span>精确率</span><strong>-</strong></div>
                                         <div><span>MRR</span><strong>-</strong></div>
-                                        <div><span>Claim Hit</span><strong>-</strong></div>
-                                        <div><span>Unsupported</span><strong>-</strong></div>
+                                        <div><span>断言命中</span><strong>-</strong></div>
+                                        <div><span>弱依据</span><strong>-</strong></div>
                                     </div>
                                     <div id="dashboardEvalFallback" class="command-note hidden">
                                         <span>评测报告尚不可用</span>
@@ -334,23 +350,23 @@
 
                                 <article class="content-card pipeline-card">
                                     <div class="card-heading">
-                                        <div><span class="section-kicker">Retrieval lifecycle</span><h3>当前 RAG 链路</h3></div>
+                                        <div><h3>当前 RAG 链路</h3></div>
                                         <span class="small-badge neutral">实时配置</span>
                                     </div>
                                     <div id="dashboardPipeline" class="pipeline-track">
-                                        <div class="pipeline-node configured"><b>01</b><span>Upload</span><small>MinIO</small></div>
+                                        <div class="pipeline-node configured"><b>01</b><span>上传</span><small>MinIO</small></div>
                                         <div class="pipeline-connector"></div>
-                                        <div class="pipeline-node configured"><b>02</b><span>Parse</span><small>Celery</small></div>
+                                        <div class="pipeline-node configured"><b>02</b><span>解析</span><small>Celery</small></div>
                                         <div class="pipeline-connector"></div>
-                                        <div class="pipeline-node configured"><b>03</b><span>Chunk</span><small>500 / 50</small></div>
+                                        <div class="pipeline-node configured"><b>03</b><span>切块</span><small>500 / 50</small></div>
                                         <div class="pipeline-connector"></div>
-                                        <div class="pipeline-node configured"><b>04</b><span>Embedding</span><small>Qwen</small></div>
+                                        <div class="pipeline-node configured"><b>04</b><span>向量化</span><small>Qwen</small></div>
                                         <div class="pipeline-connector"></div>
-                                        <div class="pipeline-node configured"><b>05</b><span>Retrieve</span><small>Hybrid</small></div>
+                                        <div class="pipeline-node configured"><b>05</b><span>检索</span><small>混合检索</small></div>
                                         <div class="pipeline-connector"></div>
-                                        <div id="dashboardRerankNode" class="pipeline-node disabled"><b>06</b><span>Rerank</span><small id="dashboardRerankStatus">可选功能 · 未开启</small></div>
+                                        <div id="dashboardRerankNode" class="pipeline-node disabled"><b>06</b><span>重排</span><small id="dashboardRerankStatus">可选功能 · 未开启</small></div>
                                         <div class="pipeline-connector"></div>
-                                        <div class="pipeline-node configured"><b>07</b><span>Answer</span><small>Citations</small></div>
+                                        <div class="pipeline-node configured"><b>07</b><span>回答</span><small>引用来源</small></div>
                                     </div>
                                 </article>
                             </section>
@@ -363,7 +379,7 @@
                         <div class="conversation-column">
                             <div class="retrieval-parameter-bar" aria-label="当前检索参数">
                                 <div class="parameter-summary">
-                                    <div><span>检索模式</span><strong id="playgroundMode">Hybrid</strong></div>
+                                    <div><span>检索模式</span><strong id="playgroundMode">混合检索</strong></div>
                                     <div><span>知识库</span><strong>默认知识库</strong></div>
                                     <div><span>引用阈值</span><strong id="playgroundThreshold">0.60</strong></div>
                                 </div>
@@ -372,13 +388,13 @@
                                         <svg class="icon"><use href="#icon-filter"></use></svg><span>检索设置</span>
                                     </summary>
                                     <div class="retrieval-settings-panel">
-                                        <div><span>Top K</span><strong id="playgroundTopK">5</strong></div>
-                                        <div><span>Rerank</span><strong id="playgroundRerank">基础检索</strong></div>
+                                        <div><span>返回数量</span><strong id="playgroundTopK">5</strong></div>
+                                        <div><span>重排</span><strong id="playgroundRerank">基础检索</strong></div>
                                         <p>问答使用系统当前检索配置；可在“检索调试”中单独对比重排结果。</p>
                                     </div>
                                 </details>
                                 <button id="evidenceToggle" class="parameter-action" type="button" aria-expanded="false">
-                                    <svg class="icon"><use href="#icon-panel"></use></svg><span>Evidence</span><b id="headerEvidenceCount">0</b>
+                                    <svg class="icon"><use href="#icon-panel"></use></svg><span>引用</span><b id="headerEvidenceCount">0</b>
                                 </button>
                             </div>
 
@@ -386,9 +402,8 @@
                                 <div class="chat-content">
                                     <div id="emptyState" class="playground-empty">
                                         <div class="playground-empty-mark"><svg class="icon"><use href="#icon-chat"></use></svg></div>
-                                        <span class="section-kicker">Knowledge playground</span>
                                         <h2>测试知识库回答与引用质量</h2>
-                                        <p>相关问题会执行 Hybrid 检索并展示 Evidence；普通问候直接返回，不触发检索。</p>
+                                        <p>相关问题会执行混合检索并展示引用证据；普通问候直接返回，不触发检索。</p>
                                         <div class="quick-prompts">
                                             <button type="button" data-question="你好">测试闲聊</button>
                                             <button type="button" data-question="今天北京天气怎么样？">测试拒答</button>
@@ -418,7 +433,7 @@
 
                         <aside id="evidencePanel" class="context-panel evidence-panel" aria-label="引用证据">
                             <header class="context-header">
-                                <div><span class="section-kicker">Evidence</span><h2>引用证据</h2></div>
+                                <div><h2>引用证据</h2></div>
                                 <div class="context-actions">
                                     <span id="evidenceCount" class="small-badge neutral">0 条</span>
                                     <button id="evidenceCloseButton" class="icon-button context-close" type="button" aria-label="关闭证据面板">
@@ -438,7 +453,7 @@
                     <div class="view-scroll">
                         <div class="standard-content wide-content">
                             <section class="view-intro">
-                                <div><span class="section-kicker">Knowledge assets</span><h2>文档集合</h2><p>查看、筛选和管理已经进入知识库的 PDF 与 TXT 文件。</p></div>
+                                <div><h2>文档集合</h2><p>查看、筛选和管理已经进入知识库的 PDF、TXT、Markdown 与 Word(.docx) 文件。</p></div>
                                 <button id="refreshDocumentsButton" class="secondary-button" type="button">
                                     <svg class="icon"><use href="#icon-refresh"></use></svg><span>刷新列表</span>
                                 </button>
@@ -457,7 +472,7 @@
                                             <span class="sr-only">筛选解析状态</span>
                                             <select id="documentStatusFilter">
                                                 <option value="ALL">全部状态</option>
-                                                <option value="PENDING">待解析</option>
+                                                <option value="PENDING">等待后台解析</option>
                                                 <option value="PARSING">解析中</option>
                                                 <option value="SUCCESS">解析成功</option>
                                                 <option value="FAILED">解析失败</option>
@@ -467,7 +482,7 @@
                                     </div>
                                     <div class="data-table documents-table">
                                         <div class="data-table-head">
-                                            <span>文件</span><span>类型</span><span>大小</span><span>解析状态</span><span>Chunks</span><span>上传时间</span><span>操作</span>
+                                            <span>文件</span><span>类型</span><span>大小</span><span>解析状态</span><span>分块数</span><span>上传时间</span><span>操作</span>
                                         </div>
                                         <div id="documentsList" class="data-table-body">
                                             <div class="empty-panel">正在加载文档列表...</div>
@@ -476,7 +491,7 @@
                                 </section>
 
                                 <aside id="documentDetailPanel" class="content-card document-detail-panel">
-                                    <div class="card-heading"><div><span class="section-kicker">Context</span><h3>文档详情</h3></div></div>
+                                    <div class="card-heading"><div><h3>文档详情</h3></div></div>
                                     <div id="documentDetailContent" class="document-detail-content">
                                         <div class="empty-panel centered"><svg class="icon"><use href="#icon-file"></use></svg><strong>请选择文档</strong><p>点击文档行可查看当前可用的元数据。</p></div>
                                     </div>
@@ -490,29 +505,31 @@
                     <div class="view-scroll">
                         <div class="standard-content">
                             <section class="view-intro">
-                                <div><span class="section-kicker">Upload and processing</span><h2>上传解析</h2><p>导入文档，并观察 MinIO、Celery、Chunk、Embedding 与 Elasticsearch 处理链路。</p></div>
+                                <div><h2>上传解析</h2><p>上传政策文件、公告文件或项目文档，系统会自动完成解析、切分、向量化和入库。</p></div>
                                 <button id="refreshPipelineButton" class="secondary-button" type="button">
-                                    <svg class="icon"><use href="#icon-refresh"></use></svg><span>刷新任务</span>
+                                    <svg class="icon"><use href="#icon-refresh"></use></svg><span>刷新解析状态</span>
                                 </button>
                             </section>
 
                             <section id="uploadDropCard" class="upload-card upload-drop-card">
                                 <div class="upload-symbol"><svg class="icon"><use href="#icon-upload"></use></svg></div>
                                 <div class="upload-copy">
-                                    <span class="section-kicker">Import document</span>
                                     <h3>拖放或选择知识文档</h3>
-                                    <p id="selectedFileName">支持 PDF、TXT；上传后立即返回，由 Celery 异步解析。</p>
+                                    <p id="selectedFileName">支持 PDF / TXT / Markdown / Word(.docx)。可一次上传多个政策文件、公告文件或项目文档。</p>
                                 </div>
                                 <div class="upload-actions">
                                     <button id="chooseFileButton" class="secondary-button" type="button">选择文件</button>
+                                    <button id="clearUploadListButton" class="secondary-button" type="button">清空列表</button>
                                     <button id="uploadButton" class="accent-button" type="button">上传并解析</button>
                                 </div>
-                                <input id="fileInput" class="sr-only" type="file" accept=".pdf,.txt">
+                                <input id="fileInput" class="sr-only" type="file" accept=".pdf,.txt,.md,.docx" multiple>
                             </section>
+                            <div id="selectedFileList" class="upload-file-list" aria-live="polite"></div>
                             <div id="uploadResult" class="inline-feedback" aria-live="polite">尚未选择文件。</div>
+                            <div id="pipelineAutoRefreshNotice" class="pipeline-refresh-notice hidden" aria-live="polite"></div>
 
                             <section class="content-card pipeline-overview">
-                                <div class="card-heading"><div><span class="section-kicker">Configured flow</span><h3>解析流程</h3></div><span class="small-badge neutral">异步执行</span></div>
+                                <div class="card-heading"><div><h3>解析流程</h3></div><span class="small-badge neutral">异步执行</span></div>
                                 <div class="pipeline-stepper">
                                     <div class="pipeline-step configured"><b>01</b><span>上传</span><small>FastAPI</small></div>
                                     <div class="step-line"></div>
@@ -520,17 +537,17 @@
                                     <div class="step-line"></div>
                                     <div class="pipeline-step configured"><b>03</b><span>异步任务</span><small>Celery</small></div>
                                     <div class="step-line"></div>
-                                    <div class="pipeline-step configured"><b>04</b><span>Chunk</span><small>500 / overlap 50</small></div>
+                                    <div class="pipeline-step configured"><b>04</b><span>切块</span><small>500 / 重叠 50</small></div>
                                     <div class="step-line"></div>
-                                    <div class="pipeline-step configured"><b>05</b><span>Embedding</span><small>OpenAI compatible</small></div>
+                                    <div class="pipeline-step configured"><b>05</b><span>向量化</span><small>兼容接口</small></div>
                                     <div class="step-line"></div>
-                                    <div class="pipeline-step configured"><b>06</b><span>Elasticsearch</span><small>chunks + vectors</small></div>
+                                    <div class="pipeline-step configured"><b>06</b><span>Elasticsearch</span><small>文本块 + 向量</small></div>
                                 </div>
                             </section>
 
                             <section class="content-card pipeline-log-card">
                                 <div class="card-heading">
-                                    <div><span class="section-kicker">Recent tasks</span><h3>最近解析任务</h3></div>
+                                    <div><h3>最近解析任务</h3></div>
                                     <span id="pipelineTaskCount" class="small-badge neutral">0 条</span>
                                 </div>
                                 <div class="data-table pipeline-table">
@@ -548,21 +565,21 @@
                     <div class="view-scroll">
                         <div class="standard-content">
                             <section class="view-intro">
-                                <div><span class="section-kicker">Retrieval inspection</span><h2>检索调试</h2><p>测试 query 能否召回正确 chunk，并观察分数、排序和来源。</p></div>
+                                <div><h2>检索调试</h2><p>测试问题能否召回正确文本块，并观察分数、排序和来源。</p></div>
                             </section>
 
                             <section class="content-card retrieval-console">
                                 <div class="retrieval-form-grid">
                                     <label class="form-field retrieval-query-field">
                                         <span>测试问题</span>
-                                        <textarea id="retrievalQueryInput" rows="3" placeholder="输入要测试的检索 query"></textarea>
+                                        <textarea id="retrievalQueryInput" rows="3" placeholder="输入要测试的检索问题"></textarea>
                                     </label>
                                     <label class="form-field">
-                                        <span>Top K</span>
+                                        <span>返回数量</span>
                                         <input id="retrievalTopKInput" type="number" min="1" max="20" value="5">
                                     </label>
                                     <label class="form-field">
-                                        <span>Rerank</span>
+                                        <span>重排</span>
                                         <select id="retrievalRerankInput">
                                             <option value="false">使用基础检索</option>
                                             <option value="true">启用 DashScope</option>
@@ -572,16 +589,16 @@
                                         <svg class="icon"><use href="#icon-search"></use></svg><span>运行检索</span>
                                     </button>
                                 </div>
-                                <div class="retrieval-hint">独立检索调试不会调用 Chat 模型；启用后会对 baseline top_n 调用 DashScope qwen3-rerank。</div>
+                                <div class="retrieval-hint">独立检索调试不会调用 Chat 模型；启用后会对基础检索候选调用 DashScope qwen3-rerank。</div>
                             </section>
 
                             <section class="content-card retrieval-results-card">
                                 <div class="card-heading">
-                                    <div><span class="section-kicker">Ranked chunks</span><h3>召回结果</h3></div>
+                                    <div><h3>召回结果</h3></div>
                                     <div class="result-summary"><span id="retrievalLatency">尚未运行</span><span id="retrievalRerankStatus">基础检索</span></div>
                                 </div>
                                 <div class="retrieval-rank-guide">
-                                    <span>Baseline Rank 表示基础检索排序结果；开启重排后会展示 rerank 对比。</span>
+                                    <span>基础排序表示原始检索结果；开启重排后会展示二次排序对比。</span>
                                     <strong id="retrievalModeHint">当前使用基础检索，未启用二次重排。</strong>
                                 </div>
                                 <div id="retrievalResults" class="retrieval-results">
@@ -596,26 +613,26 @@
                     <div class="view-scroll">
                         <div class="standard-content">
                             <section class="view-intro">
-                                <div><span class="section-kicker">RAG quality evaluation</span><h2>RAG 效果评测</h2><p>检查检索、引用、拒答和答案 claim 的稳定性。</p></div>
+                                <div><h2>RAG 效果评测</h2><p>检查检索、引用、拒答和答案断言的稳定性。</p></div>
                                 <button id="refreshEvaluationButton" class="secondary-button" type="button">
                                     <svg class="icon"><use href="#icon-refresh"></use></svg><span>读取报告</span>
                                 </button>
                             </section>
 
                             <section id="evaluationMetricGrid" class="metric-grid evaluation-metric-grid">
-                                <article class="metric-card"><div class="metric-head"><span>Baseline Hit Rate</span></div><strong data-metric="hit_rate">-</strong><small>hit_rate@k</small></article>
-                                <article class="metric-card"><div class="metric-head"><span>Recall</span></div><strong data-metric="recall">-</strong><small>recall@k</small></article>
-                                <article class="metric-card"><div class="metric-head"><span>Precision</span></div><strong data-metric="precision">-</strong><small>precision@k</small></article>
-                                <article class="metric-card"><div class="metric-head"><span>MRR</span></div><strong data-metric="mrr">-</strong><small>Mean Reciprocal Rank</small></article>
-                                <article class="metric-card"><div class="metric-head"><span>Claim Hit Rate</span></div><strong data-metric="claim_hit">-</strong><small>Expected claims</small></article>
-                                <article class="metric-card"><div class="metric-head"><span>Unsupported Claims</span></div><strong data-metric="unsupported">-</strong><small>弱支持回答句</small></article>
-                                <article class="metric-card"><div class="metric-head"><span>Abstention Rate</span></div><strong data-metric="abstention">-</strong><small>不可回答拒答率</small></article>
-                                <article class="metric-card"><div class="metric-head"><span>Rerank Status</span></div><strong data-metric="rerank">-</strong><small>离线评测配置</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>基础命中率</span></div><strong data-metric="hit_rate">-</strong><small>hit_rate@k</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>召回率</span></div><strong data-metric="recall">-</strong><small>recall@k</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>精确率</span></div><strong data-metric="precision">-</strong><small>precision@k</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>平均倒数排名</span></div><strong data-metric="mrr">-</strong><small>MRR</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>断言命中率</span></div><strong data-metric="claim_hit">-</strong><small>预期断言</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>弱依据断言</span></div><strong data-metric="unsupported">-</strong><small>弱支持回答句</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>拒答率</span></div><strong data-metric="abstention">-</strong><small>不可回答拒答率</small></article>
+                                <article class="metric-card"><div class="metric-head"><span>重排状态</span></div><strong data-metric="rerank">-</strong><small>离线评测配置</small></article>
                             </section>
 
                             <section class="content-card evaluation-summary-card">
                                 <div class="card-heading">
-                                    <div><span class="section-kicker">Report metadata</span><h3>最近报告</h3></div>
+                                    <div><h3>最近报告</h3></div>
                                     <span id="evaluationGeneratedAt" class="small-badge neutral">尚未读取</span>
                                 </div>
                                 <p id="evaluationMessage" class="evaluation-message">正在读取评测产物...</p>
@@ -629,9 +646,9 @@
                             </section>
 
                             <section class="content-card evaluation-failures-card">
-                                <div class="card-heading"><div><span class="section-kicker">Failure cases</span><h3>失败用例</h3></div><span id="evaluationFailureCount" class="small-badge neutral">0 条</span></div>
+                                <div class="card-heading"><div><h3>失败用例</h3></div><span id="evaluationFailureCount" class="small-badge neutral">0 条</span></div>
                                 <div class="data-table failure-table">
-                                    <div class="data-table-head"><span>Case ID</span><span>Query</span><span>Failure Reason</span></div>
+                                    <div class="data-table-head"><span>用例 ID</span><span>问题</span><span>失败原因</span></div>
                                     <div id="evaluationFailureList" class="data-table-body"><div class="empty-panel">暂无失败用例。</div></div>
                                 </div>
                             </section>
@@ -643,14 +660,14 @@
                     <div class="view-scroll">
                         <div class="standard-content">
                             <section class="view-intro">
-                                <div><span class="section-kicker">Runtime dependencies</span><h2>系统状态</h2><p>展示可探测服务、模型配置和 Worker 活性，不把未知状态标记为正常。</p></div>
+                                <div><h2>系统状态</h2><p>展示可探测服务、模型配置和 Worker 活性，不把未知状态标记为正常。</p></div>
                                 <button id="refreshHealthButton" class="secondary-button" type="button">
                                     <svg class="icon"><use href="#icon-refresh"></use></svg><span>重新检查</span>
                                 </button>
                             </section>
 
                             <section class="health-overview content-card">
-                                <div><span class="section-kicker">Overall status</span><h3 id="healthOverviewTitle">正在检查运行状态</h3><p id="healthOverviewText">核心检索、上传解析和可选检索增强将分别判断。</p></div>
+                                <div><h3 id="healthOverviewTitle">正在检查运行状态</h3><p id="healthOverviewText">核心检索、上传解析和可选检索增强将分别判断。</p></div>
                                 <span id="overallHealth" class="status-badge neutral">未知</span>
                             </section>
 

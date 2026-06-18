@@ -1,3 +1,8 @@
+# 导入 mimetypes
+# 作用：确保浏览器按标准 image/svg+xml 识别本地 SVG favicon。
+import mimetypes
+
+
 # 从 FastAPI 导入 FastAPI
 # 作用：FastAPI 是创建后端服务的核心类
 from fastapi import FastAPI
@@ -28,6 +33,10 @@ from app.api.v1.console import router as console_router
 # 调用本地代理防御函数
 # 作用：让 PostgreSQL、MinIO、Redis、ES 这些本地服务不走代理
 disable_proxy_for_localhost()
+
+
+# 明确注册 SVG MIME 类型，避免 favicon 被浏览器按未知图标处理
+mimetypes.add_type("image/svg+xml", ".svg")
 
 
 # 创建 FastAPI 应用对象

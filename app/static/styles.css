@@ -1134,6 +1134,11 @@ code {
     font-weight: 800;
 }
 
+.assistant-avatar .icon {
+    width: 15px;
+    height: 15px;
+}
+
 .assistant-answer {
     color: var(--text);
     font-size: 13px;
@@ -1478,6 +1483,137 @@ textarea::placeholder {
     font-size: 10px;
 }
 
+.pipeline-refresh-notice {
+    display: inline-flex;
+    align-items: center;
+    min-height: 30px;
+    width: fit-content;
+    max-width: 100%;
+    margin: 0 0 8px;
+    padding: 7px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: var(--secondary);
+    font-size: 10px;
+    font-weight: 650;
+}
+
+.pipeline-refresh-notice.info {
+    border-color: #bfdbfe;
+    background: #eff6ff;
+    color: #1d4ed8;
+}
+
+.pipeline-refresh-notice.success {
+    border-color: #abefc6;
+    background: #ecfdf3;
+    color: #067647;
+}
+
+.pipeline-refresh-notice.warning {
+    border-color: #fedf89;
+    background: #fffaeb;
+    color: #b54708;
+}
+
+.upload-file-list {
+    display: grid;
+    gap: 8px;
+    margin: 10px 0 2px;
+}
+
+.upload-file-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 12px;
+    min-width: 0;
+    padding: 11px 12px;
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    background: #ffffff;
+}
+
+.upload-file-item.info {
+    border-color: #b2ddff;
+    background: #eff8ff;
+}
+
+.upload-file-item.success {
+    border-color: #abefc6;
+    background: #ecfdf3;
+}
+
+.upload-file-item.danger {
+    border-color: #fecdca;
+    background: #fef3f2;
+}
+
+.upload-file-main {
+    display: grid;
+    min-width: 0;
+    gap: 2px;
+}
+
+.upload-file-main strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: 12px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.upload-file-main span,
+.upload-file-message {
+    color: var(--secondary);
+    font-size: 10px;
+}
+
+.upload-file-meta {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.upload-file-message {
+    grid-column: 1 / -1;
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.upload-debug-details {
+    grid-column: 1 / -1;
+    justify-self: start;
+}
+
+.upload-debug-details summary {
+    color: var(--accent);
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 650;
+    list-style-position: inside;
+}
+
+.upload-debug-grid {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 6px 10px;
+    margin-top: 7px;
+    padding: 9px 10px;
+    border: 1px solid var(--border-soft);
+    border-radius: 8px;
+    background: #f8fafc;
+    color: var(--secondary);
+    font-size: 10px;
+}
+
+.upload-debug-grid code {
+    color: var(--text);
+    overflow-wrap: anywhere;
+}
+
 .kv-list {
     display: flex;
     flex-wrap: wrap;
@@ -1612,6 +1748,7 @@ textarea::placeholder {
 }
 
 .document-id,
+.document-error,
 .document-cell {
     color: var(--muted);
     font-size: 9px;
@@ -1620,6 +1757,12 @@ textarea::placeholder {
 
 .document-id {
     margin-top: 2px;
+}
+
+.document-error {
+    margin-top: 3px;
+    color: var(--error);
+    white-space: normal;
 }
 
 .document-actions {
@@ -2383,11 +2526,57 @@ body {
 
 .rail-brand {
     border-color: #dbe5ff;
-    background: var(--accent-soft);
+    background: #ffffff;
     color: var(--accent);
-    font-size: 12px;
-    font-weight: 800;
-    letter-spacing: 0.05em;
+    box-shadow: 0 10px 24px rgba(37, 99, 235, 0.12);
+}
+
+.brand-icon {
+    display: block;
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    fill: none;
+}
+
+.brand-lockup-icon {
+    width: 38px;
+    height: 38px;
+}
+
+.brand-icon-bg {
+    fill: #eff6ff;
+    stroke: #bfdbfe;
+    stroke-width: 2;
+}
+
+.brand-icon-page.back {
+    fill: #bfdbfe;
+    stroke: #2563eb;
+    stroke-width: 2.5;
+    stroke-linejoin: round;
+}
+
+.brand-icon-page.middle,
+.brand-icon-page.front {
+    fill: none;
+    stroke: #2563eb;
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.brand-icon-page.front {
+    stroke: #60a5fa;
+}
+
+.brand-icon-lens,
+.brand-icon-handle {
+    fill: none;
+    stroke: #1d4ed8;
+    stroke-width: 4;
+    stroke-linecap: round;
+    stroke-linejoin: round;
 }
 
 .rail-item:hover,
@@ -3322,6 +3511,10 @@ body {
     color: var(--secondary);
 }
 
+.pipeline-refresh-notice {
+    margin-bottom: 10px;
+}
+
 .kv-row,
 .detail-list,
 .detail-note {
@@ -3807,6 +4000,14 @@ body {
 
     .upload-actions button {
         flex: 1;
+    }
+
+    .upload-file-item {
+        grid-template-columns: 1fr;
+    }
+
+    .upload-file-meta {
+        justify-content: flex-start;
     }
 
     .health-group-heading {
