@@ -37,7 +37,9 @@ RAG Builder 的工程价值在于：它把这些“Demo 之外的问题”变成
 
 ## RAG Builder 不只是普通 RAG Demo
 
-<!-- TODO: add docs/assets/rag-demo-comparison.png -->
+<p align="center">
+  <img src="docs/assets/rag-demo-comparison.png" alt="RAG Builder 不只是普通 RAG Demo" width="900" />
+</p>
 
 | 对比维度 | 典型 RAG Demo | RAG Builder |
 |---|---|---|
@@ -74,7 +76,9 @@ RAG Builder 的工程价值在于：它把这些“Demo 之外的问题”变成
 
 上传接口只做必要同步操作：校验文件、计算哈希、写入原文件、创建 `PENDING` 文档记录并投递 Celery 任务。解析、切块、Embedding 和 Elasticsearch 入库由 Worker 在后台完成。这样既能让上传请求快速返回，也能让文档状态、失败原因和任务日志保持可追踪。
 
-<!-- TODO: add docs/assets/system-architecture.png -->
+<p align="center">
+  <img src="docs/assets/system-architecture.png" alt="RAG Builder 系统架构" width="900" />
+</p>
 
 ```mermaid
 flowchart TD
@@ -101,7 +105,9 @@ flowchart TD
 
 文档入库不是简单地把文本塞进向量库。RAG Builder 把入库过程拆成可追踪的工程步骤：上传阶段创建任务小票，后台任务再完成解析和索引写入。
 
-<!-- TODO: add docs/assets/rag-pipeline.png -->
+<p align="center">
+  <img src="docs/assets/rag-pipeline.png" alt="RAG Builder 文档入库流水线" width="900" />
+</p>
 
 ```mermaid
 flowchart LR
