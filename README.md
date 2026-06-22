@@ -79,25 +79,25 @@ LLM 生成带引用回答
 ### 企业知识库工作台
 
 <p align="center">
-  <img src="docs/assets/system-architecture.svg" alt="RAG Builder 系统架构" width="900" />
+  <img src="docs/assets/screenshots/workspace-overview.png" alt="企业知识库工作台" width="900" />
 </p>
 
 ### RAG 链路与文档状态
 
 <p align="center">
-  <img src="docs/assets/rag-pipeline.svg" alt="RAG Builder 文档入库流水线" width="900" />
+  <img src="docs/assets/screenshots/workspace-rag-chain.png" alt="RAG 链路与文档状态" width="900" />
 </p>
 
 ### 检索调试与 Rerank 重排
 
 <p align="center">
-  <img src="docs/assets/evaluation-debug.svg" alt="RAG Builder 检索调试与离线评测" width="900" />
+  <img src="docs/assets/screenshots/retrieval-debug-rerank.png" alt="检索调试与 Rerank 重排" width="900" />
 </p>
 
 ### 系统状态面板
 
 <p align="center">
-  <img src="docs/assets/system-status.svg" alt="RAG Builder 系统状态面板" width="900" />
+  <img src="docs/assets/screenshots/system-status.png" alt="系统状态面板" width="900" />
 </p>
 
 ---
