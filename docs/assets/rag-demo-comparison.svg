@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="520" viewBox="0 0 1200 520" role="img" aria-labelledby="title desc">
+  <title id="title">普通 RAG Demo 与 RAG Builder 对比</title><desc id="desc">左侧为普通 Demo 的四项能力，右侧为 RAG Builder 的工程化能力</desc>
+  <defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0B1220"/><stop offset="1" stop-color="#15132B"/></linearGradient><linearGradient id="accent"><stop stop-color="#38BDF8"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient></defs>
+  <rect width="1200" height="520" rx="28" fill="url(#bg)"/><circle cx="1100" cy="40" r="170" fill="#7C3AED" opacity=".08"/><circle cx="80" cy="500" r="160" fill="#0891B2" opacity=".08"/>
+  <text x="60" y="62" fill="#E2E8F0" font-family="sans-serif" font-size="25" font-weight="700">RAG 工程能力对比</text><text x="60" y="91" fill="#64748B" font-family="sans-serif" font-size="15">从概念验证走向可管理、可追踪、可评测的系统</text>
+  <rect x="55" y="125" width="430" height="330" rx="22" fill="#111827" stroke="#334155"/><rect x="715" y="125" width="430" height="330" rx="22" fill="#111827" stroke="#2563EB"/>
+  <text x="270" y="174" text-anchor="middle" fill="#94A3B8" font-family="sans-serif" font-size="24" font-weight="700">普通 RAG Demo</text><text x="930" y="174" text-anchor="middle" fill="#67E8F9" font-family="sans-serif" font-size="24" font-weight="700">RAG Builder</text>
+  <g fill="#CBD5E1" font-family="sans-serif" font-size="18"><text x="105" y="230">○  文档切块</text><text x="105" y="280">○  向量检索</text><text x="105" y="330">○  拼接 Prompt</text><text x="105" y="380">○  调用模型</text></g>
+  <g fill="#E2E8F0" font-family="sans-serif" font-size="17"><text x="760" y="220">◆  文档管理</text><text x="950" y="220">◆  对象存储</text><text x="760" y="270">◆  异步解析</text><text x="950" y="270">◆  混合检索</text><text x="760" y="320">◆  Rerank 重排</text><text x="950" y="320">◆  引用溯源</text><text x="760" y="370">◆  离线评测</text><text x="950" y="370">◆  Web 控制台</text></g>
+  <circle cx="600" cy="290" r="56" fill="#172554" stroke="url(#accent)" stroke-width="3"/><path d="M570 290h54m-16-17 18 17-18 17" fill="none" stroke="#67E8F9" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><text x="600" y="375" text-anchor="middle" fill="#A78BFA" font-family="sans-serif" font-size="15">工程化升级</text>
+</svg>
